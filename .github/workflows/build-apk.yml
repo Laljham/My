@@ -1,4 +1,4 @@
-name: Ultra Fast Flutter APK Build
+name: Fast Flutter armeabi-v7a APK Build
 
 on:
   push:
@@ -9,23 +9,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ✅ Checkout source
       - uses: actions/checkout@v4
 
-      # ✅ Cache Flutter SDK (permanent cache)
+      # ✅ Cache Flutter SDK
       - name: Cache Flutter SDK
         uses: actions/cache@v4
         with:
           path: ~/.flutter
           key: flutter-${{ runner.os }}-3.24.0
 
-      # ✅ Set up Flutter (uses cached version if available)
+      # ✅ Setup Flutter
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.0'
           cache: true
 
-      # ✅ Cache pub packages
+      # ✅ Cache pub dependencies
       - name: Cache pub packages
         uses: actions/cache@v4
         with:
@@ -34,14 +33,14 @@ jobs:
           restore-keys: |
             pub-${{ runner.os }}-
 
-      # ✅ Install dependencies (ultra fast)
+      # ✅ Install dependencies
       - run: flutter pub get
 
-      # ✅ Build optimized APK (split ABI)
-      - run: flutter build apk --release --split-per-abi
+      # ✅ Build APK only for armeabi-v7a
+      - run: flutter build apk --release --target-platform android-arm --split-per-abi
 
-      # ✅ Upload all APKs as artifact
+      # ✅ Upload the armeabi-v7a APK only
       - uses: actions/upload-artifact@v4
         with:
-          name: app-release
-          path: build/app/outputs/flutter-apk/*.apk
+          name: app-armeabi-v7a
+          path: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
