@@ -42,8 +42,8 @@ jobs:
         run: flutter pub get
 
       # ✅ Build APK
-      - name: Build release APK
-        run: flutter build apk --release
+      - name: Build release APK (split per ABI)
+  run: flutter build apk --release --split-per-abi
 
       # ✅ Upload artifact
       - name: Upload APK
