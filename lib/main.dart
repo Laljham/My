@@ -4,39 +4,88 @@ void main() => runApp(MyApp());
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
-  // This widget is the root of your application.
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      // Application name
-      title: 'Flutter Hello World',
-      // Application theme data, you can set the colors for the application as
-      // you want
+      title: 'Flutter Todo App',
       theme: ThemeData(
-        // useMaterial3: false,
         primarySwatch: Colors.blue,
       ),
-      // A widget which will be started on application startup
-      home: MyHomePage(title: 'Flutter Demo Home Page'),
+      home: TodoHomePage(),
     );
   }
 }
 
-class MyHomePage extends StatelessWidget {
-  final String title;
-  const MyHomePage({super.key, required this.title});  
+class TodoHomePage extends StatefulWidget {
+  const TodoHomePage({super.key});
+
+  @override
+  _TodoHomePageState createState() => _TodoHomePageState();
+}
+
+class _TodoHomePageState extends State<TodoHomePage> {
+  final TextEditingController _controller = TextEditingController();
+  final List<String> _todos = [];
+
+  void _addTodo() {
+    if (_controller.text.isEmpty) return;
+    setState(() {
+      _todos.add(_controller.text);
+      _controller.clear();
+    });
+  }
+
+  void _removeTodo(int index) {
+    setState(() {
+      _todos.removeAt(index);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        // The title text which will be shown on the action bar
-        title: Text(title),
+        title: const Text('Todo App'),
       ),
-      body: Center(
-        child: Text(
-          'Hello, World!',
-        ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    decoration: const InputDecoration(
+                      hintText: 'Enter a task',
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.add),
+                  onPressed: _addTodo,
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _todos.isEmpty
+                ? const Center(child: Text('No tasks added yet!'))
+                : ListView.builder(
+                    itemCount: _todos.length,
+                    itemBuilder: (context, index) {
+                      return ListTile(
+                        title: Text(_todos[index]),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () => _removeTodo(index),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }
