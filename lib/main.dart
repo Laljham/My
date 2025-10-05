@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-void main() => runApp(MyApp());
+void main() => runApp(const MyApp());
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -9,161 +9,568 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Code Editor',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        brightness: Brightness.dark,
+      title: 'Ide editor',
+      theme: ThemeData.dark().copyWith(
+        primaryColor: Colors.blue,
+        scaffoldBackgroundColor: const Color(0xFF1E1E1E),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF2D2D30),
+          elevation: 0,
+        ),
       ),
-      home: CodeEditorPage(),
+      home: const IDEHomePage(),
     );
   }
 }
 
-class CodeEditorPage extends StatefulWidget {
-  const CodeEditorPage({super.key});
+class IDEHomePage extends StatefulWidget {
+  const IDEHomePage({super.key});
 
   @override
-  _CodeEditorPageState createState() => _CodeEditorPageState();
+  State<IDEHomePage> createState() => _IDEHomePageState();
 }
 
-class _CodeEditorPageState extends State<CodeEditorPage> {
-  final TextEditingController _controller = TextEditingController();
+class _IDEHomePageState extends State<IDEHomePage> with SingleTickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  String _selectedLanguage = 'Dart';
-  double _fontSize = 14.0;
-  bool _showLineNumbers = true;
-  List<String> _recentFiles = [];
+  final TextEditingController _codeController = TextEditingController();
+  
+  late TabController _tabController;
+  final List<EditorTab> _openTabs = [];
+  int _selectedTabIndex = -1;
+  String _currentProject = '';
+  String _currentProjectPath = '';
+  bool _isIndexing = false;
 
-  final List<String> _languages = [
-    'Dart',
-    'Python',
-    'JavaScript',
-    'Java',
-    'C++',
-    'HTML',
-    'CSS',
-    'JSON',
-  ];
+  final List<FileTreeNode> _fileTree = [];
+  final Map<String, bool> _expandedFolders = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 0, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _codeController.dispose();
+    super.dispose();
+  }
 
   void _openDrawer() {
     _scaffoldKey.currentState?.openDrawer();
   }
 
-  void _openEndDrawer() {
-    _scaffoldKey.currentState?.openEndDrawer();
+  void _showMoreOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF2D2D30),
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF2D2D30),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: ListView(
+            controller: scrollController,
+            padding: const EdgeInsets.only(top: 8),
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[600],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Build Options',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.build_circle, color: Colors.green),
+                title: const Text('Build release APK'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _buildProject('release APK');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.bug_report, color: Colors.orange),
+                title: const Text('Build debug APK'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _buildProject('debug APK');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.android, color: Colors.blue),
+                title: const Text('Build AAB'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _buildProject('AAB');
+                },
+              ),
+              const Divider(),
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Project Options',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.folder_open, color: Colors.yellow),
+                title: const Text('Open Folder'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _openLocalFolder();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.cloud_download, color: Colors.blue),
+                title: const Text('Clone Repository'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _cloneRepository();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.refresh, color: Colors.green),
+                title: const Text('Refresh Project'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _refreshProject();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.close, color: Colors.red),
+                title: const Text('Close Project'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _closeProject();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
-  void _newFile() {
+  void _buildProject(String type) {
+    setState(() {
+      _isIndexing = true;
+    });
+    
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _isIndexing = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Building $type...'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    });
+  }
+
+  void _openLocalFolder() {
+    final pathController = TextEditingController(text: '/storage/emulated/0/');
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('New File'),
-        content: const Text('Create a new file? Unsaved changes will be lost.'),
+        backgroundColor: const Color(0xFF2D2D30),
+        title: const Text('Open Folder'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter folder path:'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: pathController,
+              decoration: const InputDecoration(
+                hintText: '/storage/emulated/0/Projects',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.folder),
+              ),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () {
-              setState(() {
-                _controller.clear();
-              });
               Navigator.pop(context);
+              _loadLocalFolder(pathController.text);
             },
-            child: const Text('Create'),
+            child: const Text('Open'),
           ),
         ],
       ),
     );
   }
 
-  void _saveFile() {
-    if (_controller.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nothing to save!')),
-      );
-      return;
-    }
+  void _loadLocalFolder(String path) {
+    setState(() {
+      _isIndexing = true;
+      _currentProject = path.split('/').where((s) => s.isNotEmpty).last;
+      _currentProjectPath = path;
+    });
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        final nameController = TextEditingController();
-        return AlertDialog(
-          title: const Text('Save File'),
-          content: TextField(
-            controller: nameController,
-            decoration: const InputDecoration(
-              hintText: 'Enter file name',
-              border: OutlineInputBorder(),
-            ),
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _isIndexing = false;
+          _fileTree.clear();
+          _fileTree.addAll(_generateSampleFileTree());
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Folder loaded successfully!'),
+            backgroundColor: Colors.green,
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                if (nameController.text.isNotEmpty) {
-                  setState(() {
-                    _recentFiles.insert(0, nameController.text);
-                    if (_recentFiles.length > 10) {
-                      _recentFiles.removeLast();
-                    }
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Saved as ${nameController.text}')),
-                  );
-                }
-                Navigator.pop(context);
-              },
-              child: const Text('Save'),
-            ),
-          ],
         );
-      },
-    );
+      }
+    });
   }
 
-  void _copyCode() {
-    Clipboard.setData(ClipboardData(text: _controller.text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Code copied to clipboard!')),
-    );
-  }
-
-  void _pasteCode() async {
-    final data = await Clipboard.getData('text/plain');
-    if (data?.text != null) {
-      setState(() {
-        _controller.text = data!.text!;
-      });
-    }
-  }
-
-  void _clearCode() {
+  void _cloneRepository() {
+    final repoController = TextEditingController();
+    final tokenController = TextEditingController();
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Clear Code'),
-        content: const Text('Are you sure you want to clear all code?'),
+        backgroundColor: const Color(0xFF2D2D30),
+        title: const Text('Clone Repository'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: repoController,
+                decoration: const InputDecoration(
+                  labelText: 'Repository URL',
+                  hintText: 'https://github.com/username/repo.git',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.link),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: tokenController,
+                decoration: const InputDecoration(
+                  labelText: 'Access Token (Optional)',
+                  hintText: 'ghp_xxxxxxxxxxxxx',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.key),
+                ),
+                obscureText: true,
+              ),
+            ],
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () {
-              setState(() {
-                _controller.clear();
-              });
-              Navigator.pop(context);
+              if (repoController.text.isNotEmpty) {
+                Navigator.pop(context);
+                _performClone(repoController.text, tokenController.text);
+              }
             },
-            child: const Text('Clear'),
+            child: const Text('Clone'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _performClone(String repoUrl, String token) {
+    setState(() {
+      _isIndexing = true;
+      _currentProject = repoUrl.split('/').last.replaceAll('.git', '');
+      _currentProjectPath = '/storage/emulated/0/$_currentProject';
+    });
+
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          _isIndexing = false;
+          _fileTree.clear();
+          _fileTree.addAll(_generateSampleFileTree());
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Repository cloned successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    });
+  }
+
+  List<FileTreeNode> _generateSampleFileTree() {
+    return [
+      FileTreeNode(
+        'Ide editor',
+        true,
+        'Ide editor',
+        [
+          FileTreeNode('app', true, 'Ide editor/app', [
+            FileTreeNode('build', true, 'Ide editor/app/build', []),
+            FileTreeNode('libs', true, 'Ide editor/app/libs', []),
+            FileTreeNode('src', true, 'Ide editor/app/src', [
+              FileTreeNode('main', true, 'Ide editor/app/src/main', [
+                FileTreeNode('java', true, 'Ide editor/app/src/main/java', [
+                  FileTreeNode('com', true, 'Ide editor/app/src/main/java/com', [
+                    FileTreeNode('ide', true, 'Ide editor/app/src/main/java/com/ide', [
+                      FileTreeNode('editor', true, 'Ide editor/app/src/main/java/com/ide/editor', [
+                        FileTreeNode('MainActivity.java', false, 'Ide editor/app/src/main/java/com/ide/editor/MainActivity.java', []),
+                        FileTreeNode('FileTreeActivity.java', false, 'Ide editor/app/src/main/java/com/ide/editor/FileTreeActivity.java', []),
+                        FileTreeNode('ProjectAdapter.java', false, 'Ide editor/app/src/main/java/com/ide/editor/ProjectAdapter.java', []),
+                      ]),
+                    ]),
+                  ]),
+                ]),
+                FileTreeNode('res', true, 'Ide editor/app/src/main/res', []),
+                FileTreeNode('AndroidManifest.xml', false, 'Ide editor/app/src/main/AndroidManifest.xml', []),
+              ]),
+            ]),
+          ]),
+          FileTreeNode('gradle', true, 'Ide editor/gradle', [
+            FileTreeNode('wrapper', true, 'Ide editor/gradle/wrapper', [
+              FileTreeNode('gradle-wrapper.jar', false, 'Ide editor/gradle/wrapper/gradle-wrapper.jar', []),
+              FileTreeNode('gradle-wrapper.properties', false, 'Ide editor/gradle/wrapper/gradle-wrapper.properties', []),
+            ]),
+          ]),
+          FileTreeNode('.gitignore', false, 'Ide editor/.gitignore', []),
+          FileTreeNode('app_config.json', false, 'Ide editor/app_config.json', []),
+          FileTreeNode('build.gradle', false, 'Ide editor/build.gradle', []),
+          FileTreeNode('gradle.properties', false, 'Ide editor/gradle.properties', []),
+          FileTreeNode('gradlew', false, 'Ide editor/gradlew', []),
+          FileTreeNode('gradlew.bat', false, 'Ide editor/gradlew.bat', []),
+          FileTreeNode('libraries.json', false, 'Ide editor/libraries.json', []),
+          FileTreeNode('local.properties', false, 'Ide editor/local.properties', []),
+          FileTreeNode('proguard-rules.pro', false, 'Ide editor/proguard-rules.pro', []),
+          FileTreeNode('repositories.json', false, 'Ide editor/repositories.json', []),
+          FileTreeNode('settings.gradle', false, 'Ide editor/settings.gradle', []),
+          FileTreeNode('settings.json', false, 'Ide editor/settings.json', []),
+        ],
+      ),
+    ];
+  }
+
+  void _toggleFolder(String path) {
+    setState(() {
+      _expandedFolders[path] = !(_expandedFolders[path] ?? false);
+    });
+  }
+
+  void _openFile(FileTreeNode node) {
+    if (node.isDirectory) {
+      _toggleFolder(node.path);
+      return;
+    }
+    
+    int existingIndex = _openTabs.indexWhere((tab) => tab.filePath == node.path);
+    
+    if (existingIndex != -1) {
+      setState(() {
+        _selectedTabIndex = existingIndex;
+        _codeController.text = _openTabs[existingIndex].content;
+      });
+      return;
+    }
+
+    setState(() {
+      String content = _getFileContent(node.name);
+      _openTabs.add(EditorTab(node.name, node.path, content));
+      _selectedTabIndex = _openTabs.length - 1;
+      _codeController.text = content;
+      _tabController = TabController(length: _openTabs.length, vsync: this);
+      _tabController.index = _selectedTabIndex;
+    });
+  }
+
+  String _getFileContent(String fileName) {
+    if (fileName == 'FileTreeActivity.java') {
+      return '''package com.ide.editor;
+
+import android.os.Bundle;
+import android.view.View;
+import android.widget.EditText;
+import android.widget.HorizontalScrollView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;''';
+    } else if (fileName.endsWith('.java')) {
+      return '''package com.ide.editor;
+
+import android.os.Bundle;
+import android.view.View;
+
+public class ${fileName.replaceAll('.java', '')} {
+    
+}''';
+    } else if (fileName.endsWith('.gradle')) {
+      return '''plugins {
+    id 'com.android.application'
+}
+
+android {
+    compileSdk 34
+    
+    defaultConfig {
+        applicationId "com.ide.editor"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+    
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.9.0'
+}''';
+    } else if (fileName.endsWith('.json')) {
+      return '''{
+  "name": "Ide editor",
+  "version": "1.0.0",
+  "description": "A mobile IDE editor",
+  "main": "index.js"
+}''';
+    } else if (fileName.endsWith('.xml')) {
+      return '''<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.ide.editor">
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name">
+        
+    </application>
+
+</manifest>''';
+    }
+    return '// $fileName\n\n';
+  }
+
+  void _closeTab(int index) {
+    setState(() {
+      _openTabs.removeAt(index);
+      if (_selectedTabIndex >= _openTabs.length) {
+        _selectedTabIndex = _openTabs.length - 1;
+      }
+      if (_openTabs.isEmpty) {
+        _codeController.clear();
+        _selectedTabIndex = -1;
+      } else if (_selectedTabIndex >= 0) {
+        _codeController.text = _openTabs[_selectedTabIndex].content;
+      }
+      _tabController = TabController(length: _openTabs.length, vsync: this);
+      if (_selectedTabIndex >= 0 && _openTabs.isNotEmpty) {
+        _tabController.index = _selectedTabIndex;
+      }
+    });
+  }
+
+  void _refreshProject() {
+    setState(() {
+      _isIndexing = true;
+    });
+    
+    Future.delayed(const Duration(seconds: 1), () {
+      if (mounted) {
+        setState(() {
+          _isIndexing = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Project refreshed!'),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      }
+    });
+  }
+
+  void _closeProject() {
+    setState(() {
+      _currentProject = '';
+      _currentProjectPath = '';
+      _fileTree.clear();
+      _openTabs.clear();
+      _codeController.clear();
+      _selectedTabIndex = -1;
+      _expandedFolders.clear();
+    });
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Project closed'),
+        backgroundColor: Colors.orange,
       ),
     );
   }
@@ -173,293 +580,54 @@ class _CodeEditorPageState extends State<CodeEditorPage> {
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
-        title: const Text('Code Editor'),
         leading: IconButton(
           icon: const Icon(Icons.menu),
           onPressed: _openDrawer,
         ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Ide editor', style: TextStyle(fontSize: 18)),
+            if (_isIndexing)
+              const Text(
+                'Indexing XML files.',
+                style: TextStyle(fontSize: 12, color: Colors.orange),
+              ),
+          ],
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: _openEndDrawer,
+            icon: const Icon(Icons.play_arrow),
+            onPressed: () => _buildProject('debug APK'),
           ),
-          PopupMenuButton<String>(
+          IconButton(
+            icon: const Icon(Icons.folder_open),
+            onPressed: _openLocalFolder,
+          ),
+          IconButton(
             icon: const Icon(Icons.more_vert),
-            onSelected: (value) {
-              switch (value) {
-                case 'new':
-                  _newFile();
-                  break;
-                case 'save':
-                  _saveFile();
-                  break;
-                case 'copy':
-                  _copyCode();
-                  break;
-                case 'paste':
-                  _pasteCode();
-                  break;
-                case 'clear':
-                  _clearCode();
-                  break;
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(value: 'new', child: Text('New File')),
-              const PopupMenuItem(value: 'save', child: Text('Save File')),
-              const PopupMenuItem(value: 'copy', child: Text('Copy Code')),
-              const PopupMenuItem(value: 'paste', child: Text('Paste Code')),
-              const PopupMenuItem(value: 'clear', child: Text('Clear Code')),
-            ],
+            onPressed: _showMoreOptions,
           ),
         ],
-      ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(
-                color: Colors.blue,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Icon(Icons.code, size: 48, color: Colors.white),
-                  SizedBox(height: 8),
-                  Text(
-                    'Code Editor',
-                    style: TextStyle(color: Colors.white, fontSize: 24),
-                  ),
-                ],
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.create_new_folder),
-              title: const Text('New File'),
-              onTap: () {
-                Navigator.pop(context);
-                _newFile();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.save),
-              title: const Text('Save File'),
-              onTap: () {
-                Navigator.pop(context);
-                _saveFile();
-              },
-            ),
-            const Divider(),
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Text(
-                'Recent Files',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            if (_recentFiles.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Text(
-                  'No recent files',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              )
-            else
-              ..._recentFiles.map(
-                (file) => ListTile(
-                  leading: const Icon(Icons.insert_drive_file),
-                  title: Text(file),
-                  onTap: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Opening $file')),
-                    );
-                  },
-                ),
-              ),
-          ],
-        ),
-      ),
-      endDrawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(
-                color: Colors.blue,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Icon(Icons.settings, size: 48, color: Colors.white),
-                  SizedBox(height: 8),
-                  Text(
-                    'Settings',
-                    style: TextStyle(color: Colors.white, fontSize: 24),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Language',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButton<String>(
-                    value: _selectedLanguage,
-                    isExpanded: true,
-                    items: _languages
-                        .map((lang) => DropdownMenuItem(
-                              value: lang,
-                              child: Text(lang),
-                            ))
-                        .toList(),
-                    onChanged: (value) {
+        bottom: _openTabs.isNotEmpty
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(48),
+                child: Container(
+                  color: const Color(0xFF252526),
+                  child: TabBar(
+                    controller: _tabController,
+                    isScrollable: true,
+                    indicatorColor: Colors.orange,
+                    indicatorWeight: 3,
+                    onTap: (index) {
                       setState(() {
-                        _selectedLanguage = value!;
-                      });
-                      Navigator.pop(context);
-                    },
-                  ),
-                ],
-              ),
-            ),
-            const Divider(),
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Font Size',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  Slider(
-                    value: _fontSize,
-                    min: 10,
-                    max: 24,
-                    divisions: 14,
-                    label: _fontSize.round().toString(),
-                    onChanged: (value) {
-                      setState(() {
-                        _fontSize = value;
+                        _selectedTabIndex = index;
+                        _codeController.text = _openTabs[index].content;
                       });
                     },
-                  ),
-                ],
-              ),
-            ),
-            SwitchListTile(
-              title: const Text('Show Line Numbers'),
-              value: _showLineNumbers,
-              onChanged: (value) {
-                setState(() {
-                  _showLineNumbers = value;
-                });
-              },
-            ),
-          ],
-        ),
-      ),
-      body: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: Colors.grey[900],
-            child: Row(
-              children: [
-                Chip(
-                  avatar: const Icon(Icons.code, size: 16),
-                  label: Text(_selectedLanguage),
-                  backgroundColor: Colors.blue,
-                ),
-                const Spacer(),
-                Text(
-                  'Lines: ${_controller.text.split('\n').length}',
-                  style: const TextStyle(color: Colors.grey),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Container(
-              color: Colors.black87,
-              child: TextField(
-                controller: _controller,
-                maxLines: null,
-                expands: true,
-                style: TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: _fontSize,
-                  color: Colors.white,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Start typing your code here...',
-                  hintStyle: TextStyle(color: Colors.grey[600]),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.all(16),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: Colors.grey[900],
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.5),
-              spreadRadius: 1,
-              blurRadius: 3,
-              offset: const Offset(0, -1),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.copy),
-              tooltip: 'Copy',
-              onPressed: _copyCode,
-            ),
-            IconButton(
-              icon: const Icon(Icons.paste),
-              tooltip: 'Paste',
-              onPressed: _pasteCode,
-            ),
-            IconButton(
-              icon: const Icon(Icons.save),
-              tooltip: 'Save',
-              onPressed: _saveFile,
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              tooltip: 'Clear',
-              onPressed: _clearCode,
-            ),
-            IconButton(
-              icon: const Icon(Icons.play_arrow),
-              tooltip: 'Run',
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Run feature coming soon!')),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+                    tabs: _openTabs.asMap().entries.map((entry) {
+                      int idx = entry.key;
+                      EditorTab tab = entry.value;
+                      return Tab(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric
