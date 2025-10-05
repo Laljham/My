@@ -1,4 +1,4 @@
-name: ⚡ Ultra Fast Flutter APK Build
+name: Flutter Build Fast APK
 
 on:
   push:
@@ -9,61 +9,45 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 3  # Prevent long runs
 
     steps:
-      # ✅ 1. Checkout source code (fast)
-      - name: 🚀 Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
-      # ✅ 2. Cache Flutter dependencies + Gradle cache
-      - name: 🔥 Cache Dependencies
+      # ✅ Cache Flutter SDK
+      - name: Cache Flutter SDK
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.pub-cache
-            ~/.gradle/caches
-            .dart_tool/
-          key: ultra-cache-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
-          restore-keys: |
-            ultra-cache-${{ runner.os }}-
+          path: ~/.flutter
+          key: ${{ runner.os }}-flutter-${{ hashFiles('pubspec.yaml') }}
 
-      # ✅ 3. Setup Flutter (auto-cached by the action)
-      - name: ⚡ Setup Flutter
+      # ✅ Set up Flutter
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.0'
           cache: true
 
-      # ✅ 4. Install dependencies (safe & offline-aware)
-      - name: 📦 Get Packages
-        run: |
-          flutter pub get --offline || flutter pub get
+      # ✅ Cache dependencies
+      - name: Cache pub packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('pubspec.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
 
-      # ✅ 5. Build lightweight APK (only armeabi-v7a)
-      - name: 🏗️ Build Release APK
-        run: |
-          flutter build apk \
-            --release \
-            --target-platform android-arm \
-            --split-per-abi \
-            --no-track-widget-creation \
-            --build-name=1.0.0 \
-            --build-number=1
+      # ✅ Install dependencies (fast, due to cache)
+      - name: Install dependencies
+        run: flutter pub get
 
-      # ✅ 6. Upload generated APK artifact
-      - name: 📤 Upload APK
+      # ✅ Build APK
+      - name: Build release APK
+        run: flutter build apk --release
+
+      # ✅ Upload artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-armeabi-v7a
-          path: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
-          retention-days: 1
-
-      # ✅ 7. Simple success message
-      - name: 🎯 Build Success
-        if: success()
-        run: |
-          echo "✅ Build completed successfully!"
-          echo "📱 Download from: Actions → Artifacts → app-armeabi-v7a.zip"
+          name: app-release
+          path: build/app/outputs/flutter-apk/app-release.apk
