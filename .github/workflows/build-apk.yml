@@ -1,4 +1,4 @@
-name: Flutter Build APK
+name: Ultra Fast Flutter APK Build
 
 on:
   push:
@@ -9,23 +9,39 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      # ✅ Checkout source
+      - uses: actions/checkout@v4
 
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+      # ✅ Cache Flutter SDK (permanent cache)
+      - name: Cache Flutter SDK
+        uses: actions/cache@v4
+        with:
+          path: ~/.flutter
+          key: flutter-${{ runner.os }}-3.24.0
+
+      # ✅ Set up Flutter (uses cached version if available)
+      - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.0'
+          cache: true
 
-      - name: Install dependencies
-        run: flutter pub get
-
-      # ✅ Yahi step add karna hai
-      - name: Build release APK (split per ABI)
-        run: flutter build apk --release --split-per-abi
-
-      - name: Upload APKs
-        uses: actions/upload-artifact@v4
+      # ✅ Cache pub packages
+      - name: Cache pub packages
+        uses: actions/cache@v4
         with:
-          name: app-split-abi-apks
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            pub-${{ runner.os }}-
+
+      # ✅ Install dependencies (ultra fast)
+      - run: flutter pub get
+
+      # ✅ Build optimized APK (split ABI)
+      - run: flutter build apk --release --split-per-abi
+
+      # ✅ Upload all APKs as artifact
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-release
           path: build/app/outputs/flutter-apk/*.apk
