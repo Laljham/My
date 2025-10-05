@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:io';
 
 void main() => runApp(MyApp());
 
@@ -9,7 +10,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'IDE Editor',
+      title: 'Ide editor',
       theme: ThemeData.dark().copyWith(
         primaryColor: Colors.blue,
         scaffoldBackgroundColor: const Color(0xFF1E1E1E),
@@ -33,16 +34,17 @@ class IDEHomePage extends StatefulWidget {
 class _IDEHomePageState extends State<IDEHomePage> with SingleTickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final TextEditingController _codeController = TextEditingController();
-  final TextEditingController _searchController = TextEditingController();
   
   late TabController _tabController;
   List<EditorTab> _openTabs = [];
   int _selectedTabIndex = -1;
   String _currentProject = '';
+  String _currentProjectPath = '';
   bool _isIndexing = false;
 
   // File tree structure
   final List<FileTreeNode> _fileTree = [];
+  final Map<String, bool> _expandedFolders = {};
 
   @override
   void initState() {
@@ -54,7 +56,6 @@ class _IDEHomePageState extends State<IDEHomePage> with SingleTickerProviderStat
   void dispose() {
     _tabController.dispose();
     _codeController.dispose();
-    _searchController.dispose();
     super.dispose();
   }
 
@@ -62,40 +63,112 @@ class _IDEHomePageState extends State<IDEHomePage> with SingleTickerProviderStat
     _scaffoldKey.currentState?.openDrawer();
   }
 
-  void _showBuildOptions() {
+  void _showMoreOptions() {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF2D2D30),
-      builder: (context) => Container(
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.build, color: Colors.green),
-              title: const Text('Build release APK'),
-              onTap: () {
-                Navigator.pop(context);
-                _buildProject('release');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.bug_report, color: Colors.orange),
-              title: const Text('Build debug APK'),
-              onTap: () {
-                Navigator.pop(context);
-                _buildProject('debug');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.apps, color: Colors.blue),
-              title: const Text('Build AAB'),
-              onTap: () {
-                Navigator.pop(context);
-                _buildProject('aab');
-              },
-            ),
-          ],
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF2D2D30),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: ListView(
+            controller: scrollController,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                alignment: Alignment.center,
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[600],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Build Options',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.build_circle, color: Colors.green),
+                title: const Text('Build release APK'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _buildProject('release APK');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.bug_report, color: Colors.orange),
+                title: const Text('Build debug APK'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _buildProject('debug APK');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.android, color: Colors.blue),
+                title: const Text('Build AAB'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _buildProject('AAB');
+                },
+              ),
+              const Divider(),
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Project Options',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.folder_open, color: Colors.yellow),
+                title: const Text('Open Folder'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _openLocalFolder();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.cloud_download, color: Colors.blue),
+                title: const Text('Clone Repository'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _cloneRepository();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.refresh, color: Colors.green),
+                title: const Text('Refresh Project'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _refreshProject();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.close, color: Colors.red),
+                title: const Text('Close Project'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _closeProject();
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -112,7 +185,71 @@ class _IDEHomePageState extends State<IDEHomePage> with SingleTickerProviderStat
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Building $type APK...'),
+          content: Text('Building $type...'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    });
+  }
+
+  void _openLocalFolder() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2D2D30),
+        title: const Text('Open Folder'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter folder path:'),
+            const SizedBox(height: 16),
+            TextField(
+              decoration: const InputDecoration(
+                hintText: '/storage/emulated/0/Projects',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.folder),
+              ),
+              onSubmitted: (path) {
+                Navigator.pop(context);
+                _loadLocalFolder(path);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _loadLocalFolder('/storage/emulated/0/');
+            },
+            child: const Text('Browse'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _loadLocalFolder(String path) {
+    setState(() {
+      _isIndexing = true;
+      _currentProject = path.split('/').last;
+      _currentProjectPath = path;
+    });
+
+    Future.delayed(const Duration(seconds: 2), () {
+      setState(() {
+        _isIndexing = false;
+        _fileTree.clear();
+        _fileTree.addAll(_generateSampleFileTree());
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Folder loaded successfully!'),
           backgroundColor: Colors.green,
         ),
       );
@@ -178,35 +315,14 @@ class _IDEHomePageState extends State<IDEHomePage> with SingleTickerProviderStat
     setState(() {
       _isIndexing = true;
       _currentProject = repoUrl.split('/').last.replaceAll('.git', '');
+      _currentProjectPath = '/storage/emulated/0/${_currentProject}';
     });
 
-    // Simulate cloning and file tree creation
     Future.delayed(const Duration(seconds: 3), () {
       setState(() {
         _isIndexing = false;
         _fileTree.clear();
-        _fileTree.addAll([
-          FileTreeNode('app', true, [
-            FileTreeNode('build', true, []),
-            FileTreeNode('libs', true, []),
-            FileTreeNode('src', true, [
-              FileTreeNode('main', true, [
-                FileTreeNode('java', true, []),
-                FileTreeNode('res', true, []),
-                FileTreeNode('AndroidManifest.xml', false, []),
-              ]),
-            ]),
-          ]),
-          FileTreeNode('gradle', true, [
-            FileTreeNode('wrapper', true, [
-              FileTreeNode('gradle-wrapper.jar', false, []),
-              FileTreeNode('gradle-wrapper.properties', false, []),
-            ]),
-          ]),
-          FileTreeNode('.gitignore', false, []),
-          FileTreeNode('build.gradle', false, []),
-          FileTreeNode('settings.gradle', false, []),
-        ]);
+        _fileTree.addAll(_generateSampleFileTree());
       });
       
       ScaffoldMessenger.of(context).showSnackBar(
@@ -218,11 +334,70 @@ class _IDEHomePageState extends State<IDEHomePage> with SingleTickerProviderStat
     });
   }
 
+  List<FileTreeNode> _generateSampleFileTree() {
+    return [
+      FileTreeNode(
+        'Ide editor',
+        true,
+        'Ide editor',
+        [
+          FileTreeNode('app', true, 'Ide editor/app', [
+            FileTreeNode('build', true, 'Ide editor/app/build', []),
+            FileTreeNode('libs', true, 'Ide editor/app/libs', []),
+            FileTreeNode('src', true, 'Ide editor/app/src', [
+              FileTreeNode('main', true, 'Ide editor/app/src/main', [
+                FileTreeNode('java', true, 'Ide editor/app/src/main/java', [
+                  FileTreeNode('com', true, 'Ide editor/app/src/main/java/com', [
+                    FileTreeNode('ide', true, 'Ide editor/app/src/main/java/com/ide', [
+                      FileTreeNode('editor', true, 'Ide editor/app/src/main/java/com/ide/editor', [
+                        FileTreeNode('MainActivity.java', false, 'Ide editor/app/src/main/java/com/ide/editor/MainActivity.java', []),
+                        FileTreeNode('FileTreeActivity.java', false, 'Ide editor/app/src/main/java/com/ide/editor/FileTreeActivity.java', []),
+                        FileTreeNode('ProjectAdapter.java', false, 'Ide editor/app/src/main/java/com/ide/editor/ProjectAdapter.java', []),
+                      ]),
+                    ]),
+                  ]),
+                ]),
+                FileTreeNode('res', true, 'Ide editor/app/src/main/res', []),
+                FileTreeNode('AndroidManifest.xml', false, 'Ide editor/app/src/main/AndroidManifest.xml', []),
+              ]),
+            ]),
+          ]),
+          FileTreeNode('gradle', true, 'Ide editor/gradle', [
+            FileTreeNode('wrapper', true, 'Ide editor/gradle/wrapper', [
+              FileTreeNode('gradle-wrapper.jar', false, 'Ide editor/gradle/wrapper/gradle-wrapper.jar', []),
+              FileTreeNode('gradle-wrapper.properties', false, 'Ide editor/gradle/wrapper/gradle-wrapper.properties', []),
+            ]),
+          ]),
+          FileTreeNode('.gitignore', false, 'Ide editor/.gitignore', []),
+          FileTreeNode('app_config.json', false, 'Ide editor/app_config.json', []),
+          FileTreeNode('build.gradle', false, 'Ide editor/build.gradle', []),
+          FileTreeNode('gradle.properties', false, 'Ide editor/gradle.properties', []),
+          FileTreeNode('gradlew', false, 'Ide editor/gradlew', []),
+          FileTreeNode('gradlew.bat', false, 'Ide editor/gradlew.bat', []),
+          FileTreeNode('libraries.json', false, 'Ide editor/libraries.json', []),
+          FileTreeNode('local.properties', false, 'Ide editor/local.properties', []),
+          FileTreeNode('proguard-rules.pro', false, 'Ide editor/proguard-rules.pro', []),
+          FileTreeNode('repositories.json', false, 'Ide editor/repositories.json', []),
+          FileTreeNode('settings.gradle', false, 'Ide editor/settings.gradle', []),
+          FileTreeNode('settings.json', false, 'Ide editor/settings.json', []),
+        ],
+      ),
+    ];
+  }
+
+  void _toggleFolder(String path) {
+    setState(() {
+      _expandedFolders[path] = !(_expandedFolders[path] ?? false);
+    });
+  }
+
   void _openFile(FileTreeNode node) {
-    if (node.isDirectory) return;
+    if (node.isDirectory) {
+      _toggleFolder(node.path);
+      return;
+    }
     
-    // Check if file is already open
-    int existingIndex = _openTabs.indexWhere((tab) => tab.fileName == node.name);
+    int existingIndex = _openTabs.indexWhere((tab) => tab.filePath == node.path);
     
     if (existingIndex != -1) {
       setState(() {
@@ -232,10 +407,9 @@ class _IDEHomePageState extends State<IDEHomePage> with SingleTickerProviderStat
       return;
     }
 
-    // Open new file
     setState(() {
-      String content = _generateSampleContent(node.name);
-      _openTabs.add(EditorTab(node.name, content));
+      String content = _getFileContent(node.name);
+      _openTabs.add(EditorTab(node.name, node.path, content));
       _selectedTabIndex = _openTabs.length - 1;
       _codeController.text = content;
       _tabController = TabController(length: _openTabs.length, vsync: this);
@@ -243,15 +417,52 @@ class _IDEHomePageState extends State<IDEHomePage> with SingleTickerProviderStat
     });
   }
 
-  String _generateSampleContent(String fileName) {
-    if (fileName.endsWith('.java')) {
+  String _getFileContent(String fileName) {
+    if (fileName == 'FileTreeActivity.java') {
       return '''package com.ide.editor;
 
 import android.os.Bundle;
 import android.view.View;
+import android.widget.EditText;
+import android.widget.HorizontalScrollView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
-public class MainActivity {
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;''';
+    } else if (fileName.endsWith('.java')) {
+      return '''package com.ide.editor;
+
+import android.os.Bundle;
+import android.view.View;
+
+public class ${fileName.replaceAll('.java', '')} {
     
 }''';
     } else if (fileName.endsWith('.gradle')) {
@@ -266,10 +477,44 @@ android {
         applicationId "com.ide.editor"
         minSdk 21
         targetSdk 34
+        versionCode 1
+        versionName "1.0"
     }
+    
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.9.0'
 }''';
+    } else if (fileName.endsWith('.json')) {
+      return '''{
+  "name": "Ide editor",
+  "version": "1.0.0",
+  "description": "A mobile IDE editor",
+  "main": "index.js"
+}''';
+    } else if (fileName.endsWith('.xml')) {
+      return '''<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.ide.editor">
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name">
+        
+    </application>
+
+</manifest>''';
     }
-    return '// ${fileName}\n';
+    return '// ${fileName}\n\n';
   }
 
   void _closeTab(int index) {
@@ -280,14 +525,51 @@ android {
       }
       if (_openTabs.isEmpty) {
         _codeController.clear();
-      } else {
+      } else if (_selectedTabIndex >= 0) {
         _codeController.text = _openTabs[_selectedTabIndex].content;
       }
       _tabController = TabController(length: _openTabs.length, vsync: this);
-      if (_selectedTabIndex >= 0) {
+      if (_selectedTabIndex >= 0 && _openTabs.isNotEmpty) {
         _tabController.index = _selectedTabIndex;
       }
     });
+  }
+
+  void _refreshProject() {
+    setState(() {
+      _isIndexing = true;
+    });
+    
+    Future.delayed(const Duration(seconds: 1), () {
+      setState(() {
+        _isIndexing = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Project refreshed!'),
+          backgroundColor: Colors.blue,
+        ),
+      );
+    });
+  }
+
+  void _closeProject() {
+    setState(() {
+      _currentProject = '';
+      _currentProjectPath = '';
+      _fileTree.clear();
+      _openTabs.clear();
+      _codeController.clear();
+      _selectedTabIndex = -1;
+      _expandedFolders.clear();
+    });
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Project closed'),
+        backgroundColor: Colors.orange,
+      ),
+    );
   }
 
   @override
@@ -313,19 +595,15 @@ android {
         actions: [
           IconButton(
             icon: const Icon(Icons.play_arrow),
-            onPressed: _showBuildOptions,
+            onPressed: () => _buildProject('debug APK'),
           ),
           IconButton(
             icon: const Icon(Icons.folder_open),
-            onPressed: () {
-              // Open file manager
-            },
+            onPressed: _openLocalFolder,
           ),
           IconButton(
             icon: const Icon(Icons.more_vert),
-            onPressed: () {
-              // Show more options
-            },
+            onPressed: _showMoreOptions,
           ),
         ],
         bottom: _openTabs.isNotEmpty
@@ -336,7 +614,8 @@ android {
                   child: TabBar(
                     controller: _tabController,
                     isScrollable: true,
-                    indicatorColor: Colors.blue,
+                    indicatorColor: Colors.orange,
+                    indicatorWeight: 3,
                     onTap: (index) {
                       setState(() {
                         _selectedTabIndex = index;
@@ -344,267 +623,11 @@ android {
                       });
                     },
                     tabs: _openTabs.asMap().entries.map((entry) {
-                      int index = entry.key;
+                      int idx = entry.key;
                       EditorTab tab = entry.value;
                       return Tab(
-                        child: Row(
-                          children: [
-                            Text(tab.fileName),
-                            const SizedBox(width: 8),
-                            GestureDetector(
-                              onTap: () => _closeTab(index),
-                              child: const Icon(Icons.close, size: 16),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              )
-            : null,
-      ),
-      drawer: Drawer(
-        backgroundColor: const Color(0xFF252526),
-        child: Column(
-          children: [
-            DrawerHeader(
-              decoration: const BoxDecoration(
-                color: Color(0xFF2D2D30),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.folder, color: Colors.blue),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _currentProject.isEmpty ? 'Ide editor' : _currentProject,
-                          style: const TextStyle(fontSize: 18),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: ElevatedButton.icon(
-                onPressed: _cloneRepository,
-                icon: const Icon(Icons.cloud_download),
-                label: const Text('Clone Repository'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  minimumSize: const Size(double.infinity, 40),
-                ),
-              ),
-            ),
-            if (_fileTree.isNotEmpty)
-              Expanded(
-                child: ListView(
-                  children: _buildFileTree(_fileTree, 0),
-                ),
-              )
-            else
-              const Expanded(
-                child: Center(
-                  child: Text(
-                    'No project loaded\nClone a repository to start',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-      body: Column(
-        children: [
-          if (_openTabs.isNotEmpty && _selectedTabIndex >= 0)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              color: const Color(0xFF1E1E1E),
-              child: Row(
-                children: [
-                  Text(
-                    'Lines: ${_codeController.text.split('\n').length}',
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
-                  const SizedBox(width: 16),
-                  Text(
-                    _openTabs[_selectedTabIndex].fileName,
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-          Expanded(
-            child: _openTabs.isEmpty
-                ? const Center(
-                    child: Text(
-                      'Open a file to start editing',
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  )
-                : Container(
-                    color: const Color(0xFF1E1E1E),
-                    child: TextField(
-                      controller: _codeController,
-                      maxLines: null,
-                      expands: true,
-                      style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 14,
-                        color: Colors.white,
-                      ),
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.all(12),
-                      ),
-                      onChanged: (text) {
-                        if (_selectedTabIndex >= 0) {
-                          _openTabs[_selectedTabIndex].content = text;
-                        }
-                      },
-                    ),
-                  ),
-          ),
-          // Bottom toolbar with special characters
-          Container(
-            height: 48,
-            color: const Color(0xFF2D2D30),
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                _buildToolbarButton('->'),
-                _buildToolbarButton('<'),
-                _buildToolbarButton('>'),
-                _buildToolbarButton(';'),
-                _buildToolbarButton('{'),
-                _buildToolbarButton('}'),
-                _buildToolbarButton(':'),
-                _buildToolbarButton('←'),
-              ],
-            ),
-          ),
-          // Bottom tabs
-          Container(
-            height: 48,
-            color: const Color(0xFF252526),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildBottomTab('Build Logs', false),
-                _buildBottomTab('App Logs', false),
-                _buildBottomTab('Diagnostics', true),
-                _buildBottomTab('IDE Logs', false),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildToolbarButton(String text) {
-    return InkWell(
-      onTap: () {
-        int cursorPos = _codeController.selection.base.offset;
-        String currentText = _codeController.text;
-        String newText = currentText.substring(0, cursorPos) +
-            text +
-            currentText.substring(cursorPos);
-        _codeController.text = newText;
-        _codeController.selection = TextSelection.fromPosition(
-          TextPosition(offset: cursorPos + text.length),
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Text(
-          text,
-          style: const TextStyle(color: Colors.white, fontSize: 16),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBottomTab(String title, bool isSelected) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(
-            color: isSelected ? Colors.orange : Colors.transparent,
-            width: 2,
-          ),
-        ),
-      ),
-      child: Center(
-        child: Text(
-          title,
-          style: TextStyle(
-            color: isSelected ? Colors.orange : Colors.grey,
-            fontSize: 12,
-          ),
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _buildFileTree(List<FileTreeNode> nodes, int depth) {
-    List<Widget> widgets = [];
-    
-    for (var node in nodes) {
-      widgets.add(
-        InkWell(
-          onTap: () => _openFile(node),
-          child: Container(
-            padding: EdgeInsets.only(left: depth * 16.0 + 8, top: 8, bottom: 8),
-            child: Row(
-              children: [
-                Icon(
-                  node.isDirectory ? Icons.folder : Icons.insert_drive_file,
-                  size: 18,
-                  color: node.isDirectory ? Colors.blue : Colors.grey,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    node.name,
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-      
-      if (node.isDirectory && node.children.isNotEmpty) {
-        widgets.addAll(_buildFileTree(node.children, depth + 1));
-      }
-    }
-    
-    return widgets;
-  }
-}
-
-class FileTreeNode {
-  final String name;
-  final bool isDirectory;
-  final List<FileTreeNode> children;
-
-  FileTreeNode(this.name, this.isDirectory, this.children);
-}
-
-class EditorTab {
-  final String fileName;
-  String content;
-
-  EditorTab(this.fileName, this.content);
-}
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Row(
+                            children: [
+        
