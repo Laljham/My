@@ -1,69 +1,26 @@
-name: Build Flutter APK
+name: Simple APK Build
 
 on:
   push:
-    branches: [ main, master, develop ]
-  pull_request:
     branches: [ main, master ]
-  workflow_dispatch: # Manual trigger allow करेगा
-
-env:
-  FLUTTER_VERSION: '3.16.0'
+  workflow_dispatch:
 
 jobs:
-  build:
+  build-apk:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        build-type: [apk, appbundle]
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Flutter
-      uses: subosito/flutter-action@v2
+    - uses: actions/checkout@v4
+    
+    - uses: subosito/flutter-action@v2
       with:
-        flutter-version: ${{ env.FLUTTER_VERSION }}
-        channel: 'stable'
-
-    - name: Show Flutter version
-      run: flutter --version
-
-    - name: Install dependencies
-      run: flutter pub get
-
-    - name: Run tests
-      run: flutter test
-
-    - name: Build APK
-      if: matrix.build-type == 'apk'
-      run: flutter build apk --release
-
-    - name: Build App Bundle
-      if: matrix.build-type == 'appbundle'
-      run: flutter build appbundle --release
-
-    - name: Upload APK
-      if: matrix.build-type == 'apk'
-      uses: actions/upload-artifact@v4
+        flutter-version: '3.16.0'
+    
+    - run: flutter pub get
+    
+    - run: flutter build apk --release
+    
+    - uses: actions/upload-artifact@v4
       with:
-        name: app-release-apk
+        name: flutter-apk
         path: build/app/outputs/flutter-apk/app-release.apk
-
-    - name: Upload App Bundle
-      if: matrix.build-type == 'appbundle'
-      uses: actions/upload-artifact@v4
-      with:
-        name: app-release-bundle
-        path: build/app/outputs/bundle/release/app-release.aab
-
-    - name: Upload to Release
-      if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && matrix.build-type == 'apk'
-      uses: softprops/action-gh-release@v1
-      with:
-        files: build/app/outputs/flutter-apk/app-release.apk
-        tag_name: auto-build-${{ github.run_number }}
-        name: Auto Build ${{ github.run_number }}
-        draft: false
-        prerelease: false
