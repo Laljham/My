@@ -1,46 +1,95 @@
-name: Fast Flutter armeabi-v7a APK Build
+name: ⚡ Ultra Fast Flutter APK Build
 
 on:
   push:
+    branches: [ main ]
+  pull_request:
     branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 3  # Force fast build
 
     steps:
-      - uses: actions/checkout@v4
+    - name: 🚀 Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1  # Shallow clone for speed
 
-      # ✅ Cache Flutter SDK
-      - name: Cache Flutter SDK
-        uses: actions/cache@v4
-        with:
-          path: ~/.flutter
-          key: flutter-${{ runner.os }}-3.24.0
+    - name: 🔥 Mega Cache Setup
+      uses: actions/cache@v4
+      id: mega-cache
+      with:
+        path: |
+          ~/.flutter-sdk
+          ~/.pub-cache
+          ~/.gradle/caches
+          build/
+          .dart_tool/
+        key: ultra-cache-${{ hashFiles('pubspec.lock') }}-v3
+        restore-keys: |
+          ultra-cache-${{ hashFiles('pubspec.lock') }}-
+          ultra-cache-
 
-      # ✅ Setup Flutter
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.24.0'
-          cache: true
+    - name: ⚡ Lightning Flutter Setup
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.24.0'
+        cache: true
+        cache-key: flutter-3.24.0-ultra
 
-      # ✅ Cache pub dependencies
-      - name: Cache pub packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.pub-cache
-          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
-          restore-keys: |
-            pub-${{ runner.os }}-
+    - name: 📦 Smart Dependency Install
+      run: |
+        if [ -f "pubspec.lock" ] && [ -d ".dart_tool" ]; then
+          echo "🚀 Using cached dependencies"
+        else
+          flutter pub get --no-precompile --offline
+        fi
 
-      # ✅ Install dependencies
-      - run: flutter pub get
+    - name: 🏗️ Turbo APK Build
+      run: |
+        export TERM=xterm
+        flutter --suppress-analytics \
+          build apk \
+          --release \
+          --target-platform android-arm \
+          --split-per-abi \
+          --no-null-assertions \
+          --no-track-widget-creation \
+          --no-pub \
+          --build-name=1.0 \
+          --build-number=1 \
+          --dart-define=BUILD_MODE=release \
+          --dart-define=CI=true \
+          --verbose
 
-      # ✅ Build APK only for armeabi-v7a
-      - run: flutter build apk --release --target-platform android-arm --split-per-abi
+    - name: 📤 Instant Artifact Upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: ⚡ turbo-app-v7a
+        path: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+        retention-days: 1  # Reduce storage
 
-      # ✅ Upload the armeabi-v7a APK only
-      - uses: actions/upload-artifact@v4
-        with:
-          name: app-armeabi-v7a
-          path: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+    - name: 🎯 Build Success Notification
+      if: success()
+      run: |
+        echo "✅ APK built in under 3 minutes!"
+        echo "📱 Artifact ready for download"
+
+  # Optional: Skip build if only docs changed
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should-build: ${{ steps.filter.outputs.src }}
+    steps:
+    - uses: dorny/paths-filter@v2
+      id: filter
+      with:
+        filters: |
+          src:
+            - 'lib/**'
+            - 'pubspec.yaml'
+            - 'assets/**'
+            - 'android/**'
+            - 'ios/**'
