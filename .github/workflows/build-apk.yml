@@ -9,87 +9,61 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 3  # Force fast build
+    timeout-minutes: 3  # Prevent long runs
 
     steps:
-    - name: 🚀 Checkout Code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 1  # Shallow clone for speed
+      # ✅ 1. Checkout source code (fast)
+      - name: 🚀 Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-    - name: 🔥 Mega Cache Setup
-      uses: actions/cache@v4
-      id: mega-cache
-      with:
-        path: |
-          ~/.flutter-sdk
-          ~/.pub-cache
-          ~/.gradle/caches
-          build/
-          .dart_tool/
-        key: ultra-cache-${{ hashFiles('pubspec.lock') }}-v3
-        restore-keys: |
-          ultra-cache-${{ hashFiles('pubspec.lock') }}-
-          ultra-cache-
+      # ✅ 2. Cache Flutter dependencies + Gradle cache
+      - name: 🔥 Cache Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            ~/.gradle/caches
+            .dart_tool/
+          key: ultra-cache-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            ultra-cache-${{ runner.os }}-
 
-    - name: ⚡ Lightning Flutter Setup
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: '3.24.0'
-        cache: true
-        cache-key: flutter-3.24.0-ultra
+      # ✅ 3. Setup Flutter (auto-cached by the action)
+      - name: ⚡ Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          cache: true
 
-    - name: 📦 Smart Dependency Install
-      run: |
-        if [ -f "pubspec.lock" ] && [ -d ".dart_tool" ]; then
-          echo "🚀 Using cached dependencies"
-        else
-          flutter pub get --no-precompile --offline
-        fi
+      # ✅ 4. Install dependencies (safe & offline-aware)
+      - name: 📦 Get Packages
+        run: |
+          flutter pub get --offline || flutter pub get
 
-    - name: 🏗️ Turbo APK Build
-      run: |
-        export TERM=xterm
-        flutter --suppress-analytics \
-          build apk \
-          --release \
-          --target-platform android-arm \
-          --split-per-abi \
-          --no-null-assertions \
-          --no-track-widget-creation \
-          --no-pub \
-          --build-name=1.0 \
-          --build-number=1 \
-          --dart-define=BUILD_MODE=release \
-          --dart-define=CI=true \
-          --verbose
+      # ✅ 5. Build lightweight APK (only armeabi-v7a)
+      - name: 🏗️ Build Release APK
+        run: |
+          flutter build apk \
+            --release \
+            --target-platform android-arm \
+            --split-per-abi \
+            --no-track-widget-creation \
+            --build-name=1.0.0 \
+            --build-number=1
 
-    - name: 📤 Instant Artifact Upload
-      uses: actions/upload-artifact@v4
-      with:
-        name: ⚡ turbo-app-v7a
-        path: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
-        retention-days: 1  # Reduce storage
+      # ✅ 6. Upload generated APK artifact
+      - name: 📤 Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-armeabi-v7a
+          path: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+          retention-days: 1
 
-    - name: 🎯 Build Success Notification
-      if: success()
-      run: |
-        echo "✅ APK built in under 3 minutes!"
-        echo "📱 Artifact ready for download"
-
-  # Optional: Skip build if only docs changed
-  check-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      should-build: ${{ steps.filter.outputs.src }}
-    steps:
-    - uses: dorny/paths-filter@v2
-      id: filter
-      with:
-        filters: |
-          src:
-            - 'lib/**'
-            - 'pubspec.yaml'
-            - 'assets/**'
-            - 'android/**'
-            - 'ios/**'
+      # ✅ 7. Simple success message
+      - name: 🎯 Build Success
+        if: success()
+        run: |
+          echo "✅ Build completed successfully!"
+          echo "📱 Download from: Actions → Artifacts → app-armeabi-v7a.zip"
