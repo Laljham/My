@@ -1,9 +1,7 @@
-name: Flutter Build Fast APK
+name: Flutter Build APK
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
     branches: [ main ]
 
 jobs:
@@ -14,40 +12,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ✅ Cache Flutter SDK
-      - name: Cache Flutter SDK
-        uses: actions/cache@v4
-        with:
-          path: ~/.flutter
-          key: ${{ runner.os }}-flutter-${{ hashFiles('pubspec.yaml') }}
-
-      # ✅ Set up Flutter
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.0'
-          cache: true
 
-      # ✅ Cache dependencies
-      - name: Cache pub packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.pub-cache
-          key: ${{ runner.os }}-pub-${{ hashFiles('pubspec.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pub-
-
-      # ✅ Install dependencies (fast, due to cache)
       - name: Install dependencies
         run: flutter pub get
 
-      # ✅ Build APK
+      # ✅ Yahi step add karna hai
       - name: Build release APK (split per ABI)
-  run: flutter build apk --release --split-per-abi
+        run: flutter build apk --release --split-per-abi
 
-      # ✅ Upload artifact
-      - name: Upload APK
+      - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: app-split-abi-apks
+          path: build/app/outputs/flutter-apk/*.apk
