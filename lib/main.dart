@@ -1,238 +1,292 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
-void main() => runApp(const MyApp());
+void main() => runApp(MyApp());
 
+// 🔹 MAIN APP START
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'IDE Editor',
-      theme: ThemeData.dark().copyWith(
-        primaryColor: Colors.blue,
-        scaffoldBackgroundColor: const Color(0xFF1E1E1E),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF2D2D30),
-          elevation: 0,
-        ),
+      title: 'Full Todo App',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
       ),
-      home: const IDEHomePage(),
+
+      // ✅ ROUTES START (for navigation to multiple screens)
+      routes: {
+        '/': (context) => const TodoHomePage(),
+        '/about': (context) => const AboutPage(),
+        '/settings': (context) => const SettingsPage(),
+      },
+      // ✅ ROUTES END
     );
   }
 }
+// 🔹 MAIN APP END
 
-class IDEHomePage extends StatefulWidget {
-  const IDEHomePage({super.key});
+
+// 🔹 TODO HOME PAGE START
+class TodoHomePage extends StatefulWidget {
+  const TodoHomePage({super.key});
 
   @override
-  State<IDEHomePage> createState() => _IDEHomePageState();
+  _TodoHomePageState createState() => _TodoHomePageState();
 }
 
-class _IDEHomePageState extends State<IDEHomePage> with SingleTickerProviderStateMixin {
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final TextEditingController _codeController = TextEditingController();
-  late TabController _tabController;
+class _TodoHomePageState extends State<TodoHomePage> {
+  // 🔸 CONTROLLERS & VARIABLES START
+  final TextEditingController _controller = TextEditingController();
+  final List<String> _todos = [];
+  int _selectedIndex = 0; // for Bottom Navigation
+  // 🔸 CONTROLLERS & VARIABLES END
 
-  final List<EditorTab> _openTabs = [];
-  int _selectedTabIndex = -1;
 
-  final List<FileTreeNode> _fileTree = [];
-  final Map<String, bool> _expandedFolders = {};
-  bool _isIndexing = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 0, vsync: this);
-    _fileTree.addAll(_generateSampleFileTree());
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    _codeController.dispose();
-    super.dispose();
-  }
-
-  void _toggleFolder(String path) {
+  // ✅ FUNCTION: Add Todo START
+  void _addTodo() {
+    if (_controller.text.isEmpty) return;
     setState(() {
-      _expandedFolders[path] = !(_expandedFolders[path] ?? false);
+      _todos.add(_controller.text);
+      _controller.clear();
     });
   }
+  // ✅ FUNCTION: Add Todo END
 
-  void _openFile(FileTreeNode node) {
-    if (node.isDirectory) {
-      _toggleFolder(node.path);
-      return;
-    }
 
-    int existingIndex = _openTabs.indexWhere((tab) => tab.filePath == node.path);
-    if (existingIndex != -1) {
-      setState(() {
-        _selectedTabIndex = existingIndex;
-        _codeController.text = _openTabs[existingIndex].content;
-        _tabController.index = _selectedTabIndex;
-      });
-      return;
-    }
-
+  // ✅ FUNCTION: Remove Todo START
+  void _removeTodo(int index) {
     setState(() {
-      String content = _getFileContent(node.name);
-      _openTabs.add(EditorTab(node.name, node.path, content));
-      _selectedTabIndex = _openTabs.length - 1;
-      _codeController.text = content;
-      _tabController = TabController(length: _openTabs.length, vsync: this);
-      _tabController.index = _selectedTabIndex;
+      _todos.removeAt(index);
     });
   }
+  // ✅ FUNCTION: Remove Todo END
 
-  void _closeTab(int index) {
-    setState(() {
-      _openTabs.removeAt(index);
-      if (_selectedTabIndex >= _openTabs.length) {
-        _selectedTabIndex = _openTabs.length - 1;
-      }
-      if (_openTabs.isEmpty) {
-        _codeController.clear();
-        _selectedTabIndex = -1;
-      } else if (_selectedTabIndex >= 0) {
-        _codeController.text = _openTabs[_selectedTabIndex].content;
-      }
-      _tabController = TabController(length: _openTabs.length, vsync: this);
-      if (_selectedTabIndex >= 0 && _openTabs.isNotEmpty) {
-        _tabController.index = _selectedTabIndex;
-      }
-    });
-  }
 
-  String _getFileContent(String fileName) {
-    return '// Content of $fileName\n';
-  }
-
-  List<FileTreeNode> _generateSampleFileTree() {
-    return [
-      FileTreeNode('project', true, 'project', [
-        FileTreeNode('lib', true, 'project/lib', [
-          FileTreeNode('main.dart', false, 'project/lib/main.dart', []),
-        ]),
-        FileTreeNode('pubspec.yaml', false, 'project/pubspec.yaml', []),
-      ]),
-    ];
-  }
-
-  Widget _buildFileTree(List<FileTreeNode> nodes) {
-    return ListView(
-      children: nodes.map((node) {
-        bool isExpanded = _expandedFolders[node.path] ?? false;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ListTile(
-              leading: Icon(node.isDirectory
-                  ? (isExpanded ? Icons.folder_open : Icons.folder)
-                  : Icons.insert_drive_file),
-              title: Text(node.name),
-              onTap: () => _openFile(node),
-            ),
-            if (node.isDirectory && isExpanded)
-              Padding(
-                padding: const EdgeInsets.only(left: 16),
-                child: _buildFileTree(node.children),
+  // ✅ FUNCTION: Show Bottom Sheet START
+  void _showBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return Container(
+          height: 200,
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              const Text(
+                'Add Task (Bottom Sheet)',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-          ],
+              const SizedBox(height: 10),
+              TextField(
+                controller: _controller,
+                decoration: const InputDecoration(hintText: 'Enter a task'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  _addTodo();
+                  Navigator.pop(context); // close bottom sheet
+                },
+                child: const Text('Add'),
+              ),
+            ],
+          ),
         );
-      }).toList(),
+      },
     );
   }
+  // ✅ FUNCTION: Show Bottom Sheet END
+
+
+  // ✅ FUNCTION: Bottom Navigation Tap START
+  void _onTabTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+    if (index == 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Completed Tasks Screen')),
+      );
+    }
+  }
+  // ✅ FUNCTION: Bottom Navigation Tap END
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      key: _scaffoldKey,
+
+      // ✅ TOOLBAR (APPBAR) START
       appBar: AppBar(
-        title: const Text('IDE Editor'),
-        bottom: _openTabs.isNotEmpty
-            ? PreferredSize(
-                preferredSize: const Size.fromHeight(48),
-                child: Container(
-                  color: const Color(0xFF252526),
-                  child: TabBar(
-                    controller: _tabController,
-                    isScrollable: true,
-                    indicatorColor: Colors.orange,
-                    tabs: _openTabs
-                        .asMap()
-                        .entries
-                        .map(
-                          (entry) => Tab(
-                            child: Row(
-                              children: [
-                                Text(entry.value.fileName),
-                                const SizedBox(width: 8),
-                                GestureDetector(
-                                  onTap: () => _closeTab(entry.key),
-                                  child: const Icon(Icons.close, size: 18),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onTap: (index) {
-                      setState(() {
-                        _selectedTabIndex = index;
-                        _codeController.text = _openTabs[index].content;
-                      });
-                    },
-                  ),
-                ),
-              )
-            : null,
-      ),
-      body: Row(
-        children: [
-          Container(
-            width: 250,
-            color: const Color(0xFF1B1B1B),
-            child: _buildFileTree(_fileTree),
-          ),
-          const VerticalDivider(width: 1),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: TextField(
-                controller: _codeController,
-                maxLines: null,
-                expands: true,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
-                decoration: const InputDecoration(
-                  border: InputBorder.none,
-                  hintText: 'Open a file to start editing...',
-                ),
-              ),
-            ),
+        title: const Text('Todo App'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            onPressed: () {
+              // 🔹 Navigate to About Page
+              Navigator.pushNamed(context, '/about');
+            },
           ),
         ],
       ),
+      // ✅ TOOLBAR (APPBAR) END
+
+
+      // ✅ DRAWER (SIDE MENU) START
+      drawer: Drawer(
+        child: ListView(
+          children: [
+            const DrawerHeader(
+              decoration: BoxDecoration(color: Colors.blue),
+              child: Text(
+                'Navigation Menu',
+                style: TextStyle(color: Colors.white, fontSize: 20),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.home),
+              title: const Text('Home'),
+              onTap: () {
+                Navigator.pop(context); // Close drawer
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('Settings'),
+              onTap: () {
+                Navigator.pushNamed(context, '/settings');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.info),
+              title: const Text('About'),
+              onTap: () {
+                Navigator.pushNamed(context, '/about');
+              },
+            ),
+          ],
+        ),
+      ),
+      // ✅ DRAWER (SIDE MENU) END
+
+
+      // ✅ BODY (MAIN CONTENT AREA) START
+      body: Column(
+        children: [
+          // 🔹 Input Field + Add Button Row START
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    decoration:
+                        const InputDecoration(hintText: 'Enter a new task'),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.add_circle_outline),
+                  onPressed: _addTodo,
+                ),
+              ],
+            ),
+          ),
+          // 🔹 Input Field + Add Button Row END
+
+          // 🔹 Todo ListView START
+          Expanded(
+            child: _todos.isEmpty
+                ? const Center(child: Text('No tasks added yet!'))
+                : ListView.builder(
+                    itemCount: _todos.length,
+                    itemBuilder: (context, index) {
+                      return ListTile(
+                        title: Text(_todos[index]),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () => _removeTodo(index),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          // 🔹 Todo ListView END
+        ],
+      ),
+      // ✅ BODY (MAIN CONTENT AREA) END
+
+
+      // ✅ FLOATING ACTION BUTTON START
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showBottomSheet, // Opens Bottom Sheet
+        child: const Icon(Icons.add),
+      ),
+      // ✅ FLOATING ACTION BUTTON END
+
+
+      // ✅ BOTTOM NAVIGATION BAR START
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        items: const [
+          BottomNavigationBarItem(
+              icon: Icon(Icons.list), label: 'Tasks'), // Tab 0
+          BottomNavigationBarItem(
+              icon: Icon(Icons.done_all), label: 'Completed'), // Tab 1
+        ],
+        onTap: _onTabTapped,
+      ),
+      // ✅ BOTTOM NAVIGATION BAR END
     );
   }
 }
+// 🔹 TODO HOME PAGE END
 
-class EditorTab {
-  final String fileName;
-  final String filePath;
-  final String content;
 
-  EditorTab(this.fileName, this.filePath, this.content);
+
+// 🔹 ABOUT PAGE START
+class AboutPage extends StatelessWidget {
+  const AboutPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      // ✅ APPBAR START
+      appBar: AppBar(title: const Text('About App')),
+      // ✅ APPBAR END
+
+      // ✅ BODY START
+      body: const Center(
+        child: Text(
+          'This is a Todo App example.\nDeveloped in Flutter.',
+          textAlign: TextAlign.center,
+        ),
+      ),
+      // ✅ BODY END
+    );
+  }
 }
+// 🔹 ABOUT PAGE END
 
-class FileTreeNode {
-  final String name;
-  final bool isDirectory;
-  final String path;
-  final List<FileTreeNode> children;
 
-  FileTreeNode(this.name, this.isDirectory, this.path, this.children);
+
+// 🔹 SETTINGS PAGE START
+class SettingsPage extends StatelessWidget {
+  const SettingsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      // ✅ APPBAR START
+      appBar: AppBar(title: const Text('Settings')),
+      // ✅ APPBAR END
+
+      // ✅ BODY START
+      body: const Center(
+        child: Text('Settings Screen (Under Development)'),
+      ),
+      // ✅ BODY END
+    );
+  }
 }
+// 🔹 SETTINGS PAGE END
