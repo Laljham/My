@@ -147,8 +147,19 @@ class _TodoHomePageState extends State<TodoHomePage> {
             'Navigation Menu',
             style: TextStyle(color: Colors.white),
           ),
-      
-        
+        ),
+        ListTile(
+          leading: Icon(Icons.home, color: Colors.white),
+          title: Text('Home', style: TextStyle(color: Colors.white)),
+        ),
+        ListTile(
+          leading: Icon(Icons.settings, color: Colors.white),
+          title: Text('Settings', style: TextStyle(color: Colors.white)),
+        ),
+        ListTile(
+          leading: Icon(Icons.info, color: Colors.white),
+          title: Text('About', style: TextStyle(color: Colors.white)),
+        ),
       ],
     ),
   ),
