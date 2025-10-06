@@ -1,4 +1,4 @@
-name: Flutter Build Fast APK
+name: ⚡ Build Android (armeabi-v7a) + Web (HTML)
 
 on:
   push:
@@ -7,47 +7,98 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
+  # -----------------------
+  # Android job (armeabi-v7a)
+  # -----------------------
+  build-android:
+    name: Build Android (armeabi-v7a)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
-      - name: Checkout code
+      - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-      # ✅ Cache Flutter SDK
-      - name: Cache Flutter SDK
+      - name: Cache deps (pub + gradle)
         uses: actions/cache@v4
         with:
-          path: ~/.flutter
-          key: ${{ runner.os }}-flutter-${{ hashFiles('pubspec.yaml') }}
+          path: |
+            ~/.pub-cache
+            ~/.gradle/caches
+            .dart_tool/
+          key: android-cache-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            android-cache-${{ runner.os }}-
 
-      # ✅ Set up Flutter
-      - name: Set up Flutter
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.0'
           cache: true
 
-      # ✅ Cache dependencies
+      - name: Get packages
+        run: flutter pub get --offline || flutter pub get
+
+      - name: Build APK (armeabi-v7a only)
+        run: |
+          flutter build apk \
+            --release \
+            --target-platform android-arm \
+            --split-per-abi \
+            --no-track-widget-creation \
+            --build-name=1.0.0 \
+            --build-number=1
+
+      - name: Upload Android APK (armeabi-v7a)
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-armeabi-v7a
+          path: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+          retention-days: 3
+
+  # -----------------------
+  # Web job (HTML)
+  # -----------------------
+  build-web:
+    name: Build Web (HTML)
+    runs-on: ubuntu-latest
+    needs: build-android   # optional: run after android (remove if you want parallel)
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
       - name: Cache pub packages
         uses: actions/cache@v4
         with:
-          path: ~/.pub-cache
-          key: ${{ runner.os }}-pub-${{ hashFiles('pubspec.yaml') }}
+          path: |
+            ~/.pub-cache
+            .dart_tool/
+          key: web-cache-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
           restore-keys: |
-            ${{ runner.os }}-pub-
+            web-cache-${{ runner.os }}-
 
-      # ✅ Install dependencies (fast, due to cache)
-      - name: Install dependencies
-        run: flutter pub get
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          cache: true
 
-      # ✅ Build APK
-      - name: Build release APK
-        run: flutter build apk --release
+      - name: Get packages
+        run: flutter pub get --offline || flutter pub get
 
-      # ✅ Upload artifact
-      - name: Upload APK
+      - name: Build Flutter Web (release)
+        run: |
+          flutter build web --release
+
+      - name: Upload Web artifact (build/web)
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: flutter-web
+          path: build/web
+          retention-days: 3
