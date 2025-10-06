@@ -133,40 +133,26 @@ class _TodoHomePageState extends State<TodoHomePage> {
 
 
       // ✅ DRAWER (SIDE MENU) START
-      drawer: Drawer(
-        child: ListView(
-          children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(color: Colors.blue),
-              child: Text(
-                'Navigation Menu',
-                style: TextStyle(color: Colors.white, fontSize: 20),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: const Text('Home'),
-              onTap: () {
-                Navigator.pop(context); // Close drawer
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Settings'),
-              onTap: () {
-                Navigator.pushNamed(context, '/settings');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.info),
-              title: const Text('About'),
-              onTap: () {
-                Navigator.pushNamed(context, '/about');
-              },
-            ),
-          ],
-        ),
-      ),
+      Drawer(
+  child: Container(
+    color: Colors.blue, // 👈 ek hi color poore drawer ke liye
+    child: ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        DrawerHeader(
+          decoration: BoxDecoration(
+            color: Colors.blue, // 👈 same color rakho
+          ),
+          child: Text(
+            'Navigation Menu',
+            style: TextStyle(color: Colors.white),
+          ),
+      
+        
+      ],
+    ),
+  ),
+)
       // ✅ DRAWER (SIDE MENU) END
 
 
