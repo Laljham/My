@@ -1,121 +1,192 @@
-name: 🚀 Build & Deploy Flutter Web
+name: ⚡ Build Android (armeabi-v7a) + Web (HTML)
+
 
 on:
-  push:
-    branches: [ main ]
+
+  push:
+
+    branches: [ main ]
+
+  pull_request:
+
+    branches: [ main ]
+
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: 🚀 Checkout Code
-      uses: actions/checkout@v4
-    
-    - name: ⚡ Setup Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: '3.22.0'
-        channel: 'stable'
-    
-    - name: 📦 Enable Web & Install Dependencies
-      run: |
-        flutter config --enable-web
-        flutter pub get
-    
-    - name: 🌐 Build Flutter Web
-      run: |
-        flutter build web --release --web-renderer html
-    
-    - name: 📊 Create Status Page
-      run: |
-        cd build/web
-        cat > status.html << 'HTML'
-<!DOCTYPE html>
-<html>
-<head>
-    <title>🚀 Build Successful</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-        }
-        .container {
-            background: white;
-            padding: 40px;
-            border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            text-align: center;
-            max-width: 500px;
-        }
-        .success {
-            color: #4CAF50;
-            font-size: 48px;
-            margin-bottom: 20px;
-        }
-        h1 {
-            color: #333;
-            margin-bottom: 10px;
-        }
-        .info {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 15px 0;
-            text-align: left;
-        }
-        .btn {
-            display: inline-block;
-            background: #007bff;
-            color: white;
-            padding: 12px 24px;
-            text-decoration: none;
-            border-radius: 6px;
-            margin: 10px 5px;
-            transition: background 0.3s;
-        }
-        .btn:hover {
-            background: #0056b3;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="success">✅</div>
-        <h1>Build Successful!</h1>
-        <p>Your Flutter web app has been deployed successfully.</p>
-        
-        <div class="info">
-            <strong>📦 Build Information:</strong><br>
-            Commit: <span id="commit-sha"></span><br>
-            Time: <span id="build-time"></span>
-        </div>
-        
-        <div>
-            <a href="index.html" class="btn">🎯 Open App</a>
-            <a href="https://github.com/${{ github.repository }}/actions" class="btn">📊 Build Logs</a>
-        </div>
-    </div>
 
-    <script>
-        document.getElementById('commit-sha').textContent = '${{ github.sha }}'.substring(0, 7);
-        document.getElementById('build-time').textContent = new Date().toLocaleString();
-    </script>
-</body>
-</html>
-HTML
+  # -----------------------
 
-    - name: 🚀 Deploy to GitHub Pages
-      uses: peaceiris/actions-gh-pages@v3
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./build/web
-        force_orphan: true
+  # Android job (armeabi-v7a)
+
+  # -----------------------
+
+  build-android:
+
+    name: Build Android (armeabi-v7a)
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 10
+
+
+    steps:
+
+      - name: Checkout repo
+
+        uses: actions/checkout@v4
+
+        with:
+
+          fetch-depth: 1
+
+
+      - name: Cache deps (pub + gradle)
+
+        uses: actions/cache@v4
+
+        with:
+
+          path: |
+
+            ~/.pub-cache
+
+            ~/.gradle/caches
+
+            .dart_tool/
+
+          key: android-cache-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+
+          restore-keys: |
+
+            android-cache-${{ runner.os }}-
+
+
+      - name: Setup Flutter
+
+        uses: subosito/flutter-action@v2
+
+        with:
+
+          flutter-version: '3.24.0'
+
+          cache: true
+
+
+      - name: Get packages
+
+        run: flutter pub get --offline || flutter pub get
+
+
+      - name: Build APK (armeabi-v7a only)
+
+        run: |
+
+          flutter build apk \
+
+            --release \
+
+            --target-platform android-arm \
+
+            --split-per-abi \
+
+            --no-track-widget-creation \
+
+            --build-name=1.0.0 \
+
+            --build-number=1
+
+
+      - name: Upload Android APK (armeabi-v7a)
+
+        uses: actions/upload-artifact@v4
+
+        with:
+
+          name: app-armeabi-v7a
+
+          path: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+
+          retention-days: 3
+
+
+  # -----------------------
+
+  # Web job (HTML)
+
+  # -----------------------
+
+  build-web:
+
+    name: Build Web (HTML)
+
+    runs-on: ubuntu-latest
+
+    needs: build-android   # optional: run after android (remove if you want parallel)
+
+    timeout-minutes: 10
+
+
+    steps:
+
+      - name: Checkout repo
+
+        uses: actions/checkout@v4
+
+        with:
+
+          fetch-depth: 1
+
+
+      - name: Cache pub packages
+
+        uses: actions/cache@v4
+
+        with:
+
+          path: |
+
+            ~/.pub-cache
+
+            .dart_tool/
+
+          key: web-cache-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+
+          restore-keys: |
+
+            web-cache-${{ runner.os }}-
+
+
+      - name: Setup Flutter
+
+        uses: subosito/flutter-action@v2
+
+        with:
+
+          flutter-version: '3.24.0'
+
+          cache: true
+
+
+      - name: Get packages
+
+        run: flutter pub get --offline || flutter pub get
+
+
+      - name: Build Flutter Web (release)
+
+        run: |
+
+          flutter build web --release
+
+
+      - name: Upload Web artifact (build/web)
+
+        uses: actions/upload-artifact@v4
+
+        with:
+
+          name: flutter-web
+
+          path: build/web
+
+          retention-days: 3
