@@ -18,6 +18,21 @@ class MyApp extends StatelessWidget {
   }
 }
 
+// ✅ FILE NODE CLASS (STATE KE BAHAR)
+class FileNode {
+  String name;
+  bool isExpanded;
+  bool isFile;
+  List<FileNode> children;
+  
+  FileNode({
+    required this.name,
+    required this.isFile,
+    this.isExpanded = false,
+    this.children = const [],
+  });
+}
+
 class CodeEditorHome extends StatefulWidget {
   const CodeEditorHome({super.key});
 
@@ -35,31 +50,13 @@ class _CodeEditorHomeState extends State<CodeEditorHome> {
     _loadZipFromAssets();
   }
 
-  // 🔹 FILE NODE CLASS (TREE STRUCTURE KE LIYE)
-  class FileNode {
-    String name;
-    bool isExpanded;
-    bool isFile;
-    List<FileNode> children;
-    
-    FileNode({
-      required this.name,
-      required this.isFile,
-      this.isExpanded = false,
-      this.children = const [],
-    });
-  }
-
-  // 🔹 ZIP SE TREE BANAYE
   Future<void> _loadZipFromAssets() async {
     try {
       final ByteData data = await rootBundle.load('assets/Hello-World.zip');
       final Archive archive = ZipDecoder().decodeBytes(data.buffer.asUint8List());
       
-      // Root node banao
       FileNode root = FileNode(name: 'Hello-World', isFile: false, isExpanded: true);
       
-      // Har file ko tree mein add karo
       for (var file in archive.files) {
         if (file.name.isNotEmpty) {
           _addToTree(root, file.name, file.isFile);
@@ -79,7 +76,6 @@ class _CodeEditorHomeState extends State<CodeEditorHome> {
     }
   }
 
-  // 🔹 TREE STRUCTURE BANANE KA FUNCTION
   void _addToTree(FileNode node, String filePath, bool isFile) {
     List<String> parts = filePath.split('/').where((part) => part.isNotEmpty).toList();
     
@@ -88,14 +84,15 @@ class _CodeEditorHomeState extends State<CodeEditorHome> {
     String currentPart = parts.first;
     String remainingPath = parts.sublist(1).join('/');
     
-    // Check if child already exists
-    FileNode? existingChild = node.children.firstWhere(
-      (child) => child.name == currentPart,
-      orElse: () => FileNode(name: '', isFile: true), // dummy
-    );
+    // ✅ PROPER WAY TO FIND EXISTING CHILD
+    FileNode? existingChild;
+    try {
+      existingChild = node.children.firstWhere((child) => child.name == currentPart);
+    } catch (e) {
+      existingChild = null;
+    }
     
-    if (existingChild.name.isEmpty) {
-      // New child banao
+    if (existingChild == null) {
       existingChild = FileNode(
         name: currentPart,
         isFile: parts.length == 1 ? isFile : false,
@@ -103,13 +100,11 @@ class _CodeEditorHomeState extends State<CodeEditorHome> {
       node.children.add(existingChild);
     }
     
-    // Recursively process remaining path
     if (remainingPath.isNotEmpty) {
       _addToTree(existingChild, remainingPath, isFile);
     }
   }
 
-  // 🔹 TREE WIDGET (RECURSIVE)
   Widget _buildTree(List<FileNode> nodes, [int level = 0]) {
     return ListView.builder(
       shrinkWrap: true,
@@ -120,10 +115,10 @@ class _CodeEditorHomeState extends State<CodeEditorHome> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // FILE/FOLDER ITEM
             Container(
               padding: EdgeInsets.only(left: (level * 20.0) + 16.0),
               child: ListTile(
+                contentPadding: EdgeInsets.zero,
                 leading: Icon(
                   node.isFile ? Icons.insert_drive_file_outlined : Icons.folder,
                   color: node.isFile ? Colors.blueGrey : Colors.amber,
@@ -155,7 +150,6 @@ class _CodeEditorHomeState extends State<CodeEditorHome> {
               ),
             ),
             
-            // CHILDREN (RECURSIVE)
             if (!node.isFile && node.isExpanded && node.children.isNotEmpty)
               _buildTree(node.children, level + 1),
           ],
@@ -179,7 +173,6 @@ class _CodeEditorHomeState extends State<CodeEditorHome> {
     return Drawer(
       child: Column(
         children: [
-          // Header
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Text(
@@ -193,7 +186,6 @@ class _CodeEditorHomeState extends State<CodeEditorHome> {
           ),
           const Divider(),
           
-          // File Tree
           if (isLoading)
             const Center(child: CircularProgressIndicator())
           else
@@ -205,7 +197,7 @@ class _CodeEditorHomeState extends State<CodeEditorHome> {
     );
   }
 
-  // 🔹 BAKI SAB POPUP FUNCTIONS (SAME RAHEGA)
+  // ✅ BAKI KE FUNCTIONS SAME RAHENGE
   void _showFileOptions(BuildContext context, String fileName, bool isFile) {
     showModalBottomSheet(
       context: context,
@@ -295,7 +287,6 @@ class _CodeEditorHomeState extends State<CodeEditorHome> {
           ),
           TextButton(
             onPressed: () {
-              // Yahan new file/folder add karna hoga tree mein
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text("${isFile ? 'File' : 'Folder'} created")),
@@ -309,8 +300,7 @@ class _CodeEditorHomeState extends State<CodeEditorHome> {
   }
 
   void _showRenameDialog(BuildContext context, String oldName) {
-    final TextEditingController renameController =
-        TextEditingController(text: oldName);
+    final TextEditingController renameController = TextEditingController(text: oldName);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
