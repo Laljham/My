@@ -2,100 +2,68 @@ import 'package:flutter/material.dart';
 
 void main() => runApp(const MyApp());
 
-/*──────────────────────────────
- 🟦 MAIN APP START
-──────────────────────────────*/
+// 🔹 MAIN APP START
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Code Editor App',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.indigo,
-      ),
-      home: const CodeEditorHomePage(),
+      title: 'Code Editor Drawer Demo',
+      theme: ThemeData(primarySwatch: Colors.indigo),
+      home: const CodeEditorHome(),
     );
   }
 }
-/*──────────────────────────────
- 🟦 MAIN APP END
-──────────────────────────────*/
+// 🔹 MAIN APP END
 
 
-
-/*──────────────────────────────
- 🟩 HOME PAGE (MAIN SCREEN) START
-──────────────────────────────*/
-class CodeEditorHomePage extends StatefulWidget {
-  const CodeEditorHomePage({super.key});
+// 🔹 HOME SCREEN START
+class CodeEditorHome extends StatefulWidget {
+  const CodeEditorHome({super.key});
 
   @override
-  State<CodeEditorHomePage> createState() => _CodeEditorHomePageState();
+  State<CodeEditorHome> createState() => _CodeEditorHomeState();
 }
 
-class _CodeEditorHomePageState extends State<CodeEditorHomePage> {
-  // 🔸 VARIABLES START
-  final TextEditingController _codeController = TextEditingController(
-    text: "// Write your code here...\n\nvoid main() {\n  print('Hello Flutter!');\n}",
-  );
-  bool isExpanded = false; // bottom sheet expand/collapse control
-  // 🔸 VARIABLES END
+class _CodeEditorHomeState extends State<CodeEditorHome> {
+  // 🔸 Dummy File List (in real app — filesystem se load hoga)
+  List<String> files = ["main.dart", "home.dart", "utils/", "theme/"];
 
-  // 🔹 DRAWER FILE LIST (Fake structure for now)
-  final List<String> files = [
-    "main.dart",
-    "home_page.dart",
-    "editor.dart",
-    "theme.dart",
-    "utils/helpers.dart"
-  ];
-
-  /*──────────────────────────────
-   🧭 TOOLBAR (APPBAR) START
-  ──────────────────────────────*/
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      title: const Text("Flutter Code Editor"),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.save),
-          tooltip: "Save File",
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("File Saved Successfully!")),
-            );
-          },
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("📂 Flutter Code Editor")),
+      drawer: _buildDrawer(), // 🔹 Custom Drawer Widget
+      body: const Center(
+        child: Text(
+          "Code Editor Area (main content)",
+          style: TextStyle(fontSize: 16),
         ),
-        IconButton(
-          icon: const Icon(Icons.settings),
-          onPressed: () {},
-        ),
-      ],
+      ),
     );
   }
-  /*──────────────────────────────
-   🧭 TOOLBAR (APPBAR) END
-  ──────────────────────────────*/
 
-
-  /*──────────────────────────────
-   📁 DRAWER (FILE NAVIGATION) START
-  ──────────────────────────────*/
+  // 🔹 DRAWER START
   Widget _buildDrawer() {
     return Drawer(
       child: ListView(
         children: [
           const DrawerHeader(
             decoration: BoxDecoration(color: Colors.indigo),
-            child: Text("📂 Project Files",
-                style: TextStyle(color: Colors.white, fontSize: 18)),
+            child: Text(
+              "📁 Project Files",
+              style: TextStyle(color: Colors.white, fontSize: 18),
+            ),
           ),
           for (var file in files)
             ListTile(
-              leading: const Icon(Icons.insert_drive_file_outlined),
+              leading: Icon(
+                file.endsWith('/')
+                    ? Icons.folder
+                    : Icons.insert_drive_file_outlined,
+                color: file.endsWith('/') ? Colors.amber : Colors.blueGrey,
+              ),
               title: Text(file),
               onTap: () {
                 Navigator.pop(context);
@@ -103,125 +71,196 @@ class _CodeEditorHomePageState extends State<CodeEditorHomePage> {
                   SnackBar(content: Text("Opened: $file")),
                 );
               },
+              // ✅ Long Press → Popup Menu
+              onLongPress: () {
+                _showFileOptions(context, file);
+              },
             ),
         ],
       ),
     );
   }
-  /*──────────────────────────────
-   📁 DRAWER (FILE NAVIGATION) END
-  ──────────────────────────────*/
+  // 🔹 DRAWER END
 
 
-  /*──────────────────────────────
-   🧾 MAIN EDITOR AREA START (Center 70%)
-  ──────────────────────────────*/
-  Widget _buildEditorArea() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      color: Colors.grey[100],
-      child: TextField(
-        controller: _codeController,
-        maxLines: null,
-        expands: true,
-        decoration: const InputDecoration(
-          border: InputBorder.none,
-        ),
-        style: const TextStyle(
-          fontFamily: 'monospace',
-          fontSize: 15,
-          color: Colors.black87,
-        ),
-      ),
-    );
-  }
-  /*──────────────────────────────
-   🧾 MAIN EDITOR AREA END
-  ──────────────────────────────*/
-
-
-  /*──────────────────────────────
-   🧩 PERSISTENT BOTTOM SHEET START
-   - 10% visible always
-   - swipe to expand
-  ──────────────────────────────*/
-  Widget _buildBottomSheet() {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      height: isExpanded
-          ? MediaQuery.of(context).size.height * 0.4
-          : MediaQuery.of(context).size.height * 0.1,
-      decoration: BoxDecoration(
-        color: Colors.blueGrey[50],
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: const [
-          BoxShadow(blurRadius: 6, color: Colors.black26),
-        ],
-      ),
-      child: Column(
-        children: [
-          GestureDetector(
-            onTap: () => setState(() => isExpanded = !isExpanded),
-            child: Container(
-              width: 50,
-              height: 5,
-              margin: const EdgeInsets.only(top: 8),
-              decoration: BoxDecoration(
-                color: Colors.grey[400],
-                borderRadius: BorderRadius.circular(10),
+  // 🔹 FIRST POPUP (New / Rename / Delete)
+  void _showFileOptions(BuildContext context, String fileName) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.create_new_folder_outlined),
+                title: const Text('New'),
+                onTap: () {
+                  Navigator.pop(context); // close this popup
+                  _showNewPopup(context); // open second popup
+                },
               ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text("Console Output",
-              style: TextStyle(fontWeight: FontWeight.bold)),
-          const Divider(),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(8),
-              child: const Text(
-                "Build running...\nNo errors found ✅",
-                style: TextStyle(fontFamily: 'monospace'),
+              ListTile(
+                leading: const Icon(Icons.edit),
+                title: const Text('Rename'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showRenameDialog(context, fileName);
+                },
               ),
-            ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text('Delete'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _deleteFile(fileName);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // 🔹 SECOND POPUP (File / Directory)
+  void _showNewPopup(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.insert_drive_file),
+                title: const Text('File'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showCreateDialog(context, isFile: true);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.folder),
+                title: const Text('Directory'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showCreateDialog(context, isFile: false);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // 🔹 CREATE DIALOG (File / Folder)
+  void _showCreateDialog(BuildContext context, {required bool isFile}) {
+    final TextEditingController nameController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isFile ? 'Create File' : 'Create Folder'),
+        backgroundColor: Colors.white70,
+        content: TextField(
+          controller: nameController,
+          decoration: InputDecoration(
+            hintText: isFile ? 'File name' : 'Folder name',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                String newItem = nameController.text.trim();
+                if (newItem.isNotEmpty) {
+                  files.add(isFile ? newItem : "$newItem/");
+                }
+              });
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text("${isFile ? 'File' : 'Folder'} created")),
+              );
+            },
+            child: const Text('Create'),
           ),
         ],
       ),
     );
   }
-  /*──────────────────────────────
-   🧩 PERSISTENT BOTTOM SHEET END
-  ──────────────────────────────*/
 
-
-  /*──────────────────────────────
-   ⚙️ BUILD METHOD START
-  ──────────────────────────────*/
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: _buildAppBar(), // Toolbar
-      drawer: _buildDrawer(), // Side menu (file tree)
-      body: Stack(
-        children: [
-          // Main editor (70–80%)
-          Positioned.fill(
-            child: _buildEditorArea(),
+  // 🔹 RENAME DIALOG
+  void _showRenameDialog(BuildContext context, String oldName) {
+    final TextEditingController renameController =
+        TextEditingController(text: oldName.replaceAll("/", ""));
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rename'),
+        backgroundColor: Colors.white70,
+        content: TextField(
+          controller: renameController,
+          decoration: const InputDecoration(hintText: 'Enter new name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
           ),
-
-          // Bottom sheet fixed
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: _buildBottomSheet(),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                int index = files.indexOf(oldName);
+                if (index != -1) {
+                  files[index] = oldName.endsWith('/')
+                      ? "${renameController.text}/"
+                      : renameController.text;
+                }
+              });
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Renamed successfully')),
+              );
+            },
+            child: const Text('Save'),
           ),
         ],
       ),
     );
   }
-  /*──────────────────────────────
-   ⚙️ BUILD METHOD END
-  ──────────────────────────────*/
+
+  // 🔹 DELETE FUNCTION (Demo)
+  void _deleteFile(String fileName) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete'),
+        content: Text('Do you want to delete "$fileName"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                files.remove(fileName);
+              });
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Deleted successfully')),
+              );
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
 }
-/*──────────────────────────────
- 🟩 HOME PAGE (MAIN SCREEN) END
-──────────────────────────────*/
+// 🔹 HOME SCREEN END
