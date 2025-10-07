@@ -1,292 +1,227 @@
 import 'package:flutter/material.dart';
 
-void main() => runApp(MyApp());
+void main() => runApp(const MyApp());
 
-// 🔹 MAIN APP START
+/*──────────────────────────────
+ 🟦 MAIN APP START
+──────────────────────────────*/
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Full Todo App',
+      title: 'Code Editor App',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        primarySwatch: Colors.indigo,
       ),
-
-      // ✅ ROUTES START (for navigation to multiple screens)
-      routes: {
-        '/': (context) => const TodoHomePage(),
-        '/about': (context) => const AboutPage(),
-        '/settings': (context) => const SettingsPage(),
-      },
-      // ✅ ROUTES END
+      home: const CodeEditorHomePage(),
     );
   }
 }
-// 🔹 MAIN APP END
+/*──────────────────────────────
+ 🟦 MAIN APP END
+──────────────────────────────*/
 
 
-// 🔹 TODO HOME PAGE START
-class TodoHomePage extends StatefulWidget {
-  const TodoHomePage({super.key});
+
+/*──────────────────────────────
+ 🟩 HOME PAGE (MAIN SCREEN) START
+──────────────────────────────*/
+class CodeEditorHomePage extends StatefulWidget {
+  const CodeEditorHomePage({super.key});
 
   @override
-  _TodoHomePageState createState() => _TodoHomePageState();
+  State<CodeEditorHomePage> createState() => _CodeEditorHomePageState();
 }
 
-class _TodoHomePageState extends State<TodoHomePage> {
-  // 🔸 CONTROLLERS & VARIABLES START
-  final TextEditingController _controller = TextEditingController();
-  final List<String> _todos = [];
-  int _selectedIndex = 0; // for Bottom Navigation
-  // 🔸 CONTROLLERS & VARIABLES END
+class _CodeEditorHomePageState extends State<CodeEditorHomePage> {
+  // 🔸 VARIABLES START
+  final TextEditingController _codeController = TextEditingController(
+    text: "// Write your code here...\n\nvoid main() {\n  print('Hello Flutter!');\n}",
+  );
+  bool isExpanded = false; // bottom sheet expand/collapse control
+  // 🔸 VARIABLES END
 
+  // 🔹 DRAWER FILE LIST (Fake structure for now)
+  final List<String> files = [
+    "main.dart",
+    "home_page.dart",
+    "editor.dart",
+    "theme.dart",
+    "utils/helpers.dart"
+  ];
 
-  // ✅ FUNCTION: Add Todo START
-  void _addTodo() {
-    if (_controller.text.isEmpty) return;
-    setState(() {
-      _todos.add(_controller.text);
-      _controller.clear();
-    });
-  }
-  // ✅ FUNCTION: Add Todo END
-
-
-  // ✅ FUNCTION: Remove Todo START
-  void _removeTodo(int index) {
-    setState(() {
-      _todos.removeAt(index);
-    });
-  }
-  // ✅ FUNCTION: Remove Todo END
-
-
-  // ✅ FUNCTION: Show Bottom Sheet START
-  void _showBottomSheet() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        return Container(
-          height: 200,
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              const Text(
-                'Add Task (Bottom Sheet)',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _controller,
-                decoration: const InputDecoration(hintText: 'Enter a task'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  _addTodo();
-                  Navigator.pop(context); // close bottom sheet
-                },
-                child: const Text('Add'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-  // ✅ FUNCTION: Show Bottom Sheet END
-
-
-  // ✅ FUNCTION: Bottom Navigation Tap START
-  void _onTabTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-    if (index == 1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Completed Tasks Screen')),
-      );
-    }
-  }
-  // ✅ FUNCTION: Bottom Navigation Tap END
-
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-
-      // ✅ TOOLBAR (APPBAR) START
-      appBar: AppBar(
-        title: const Text('Todo App'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            onPressed: () {
-              // 🔹 Navigate to About Page
-              Navigator.pushNamed(context, '/about');
-            },
-          ),
-        ],
-      ),
-      // ✅ TOOLBAR (APPBAR) END
-
-
-      // ✅ DRAWER (SIDE MENU) START
-      drawer: Drawer(
-        child: ListView(
-          children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(color: Colors.blue),
-              child: Text(
-                'Navigation Menu',
-                style: TextStyle(color: Colors.white, fontSize: 20),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: const Text('Home'),
-              onTap: () {
-                Navigator.pop(context); // Close drawer
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Settings'),
-              onTap: () {
-                Navigator.pushNamed(context, '/settings');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.info),
-              title: const Text('About'),
-              onTap: () {
-                Navigator.pushNamed(context, '/about');
-              },
-            ),
-          ],
+  /*──────────────────────────────
+   🧭 TOOLBAR (APPBAR) START
+  ──────────────────────────────*/
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      title: const Text("Flutter Code Editor"),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.save),
+          tooltip: "Save File",
+          onPressed: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("File Saved Successfully!")),
+            );
+          },
         ),
-      ),
-      // ✅ DRAWER (SIDE MENU) END
+        IconButton(
+          icon: const Icon(Icons.settings),
+          onPressed: () {},
+        ),
+      ],
+    );
+  }
+  /*──────────────────────────────
+   🧭 TOOLBAR (APPBAR) END
+  ──────────────────────────────*/
 
 
-      // ✅ BODY (MAIN CONTENT AREA) START
-      body: Column(
+  /*──────────────────────────────
+   📁 DRAWER (FILE NAVIGATION) START
+  ──────────────────────────────*/
+  Widget _buildDrawer() {
+    return Drawer(
+      child: ListView(
         children: [
-          // 🔹 Input Field + Add Button Row START
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    decoration:
-                        const InputDecoration(hintText: 'Enter a new task'),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.add_circle_outline),
-                  onPressed: _addTodo,
-                ),
-              ],
+          const DrawerHeader(
+            decoration: BoxDecoration(color: Colors.indigo),
+            child: Text("📂 Project Files",
+                style: TextStyle(color: Colors.white, fontSize: 18)),
+          ),
+          for (var file in files)
+            ListTile(
+              leading: const Icon(Icons.insert_drive_file_outlined),
+              title: Text(file),
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("Opened: $file")),
+                );
+              },
             ),
-          ),
-          // 🔹 Input Field + Add Button Row END
-
-          // 🔹 Todo ListView START
-          Expanded(
-            child: _todos.isEmpty
-                ? const Center(child: Text('No tasks added yet!'))
-                : ListView.builder(
-                    itemCount: _todos.length,
-                    itemBuilder: (context, index) {
-                      return ListTile(
-                        title: Text(_todos[index]),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _removeTodo(index),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-          // 🔹 Todo ListView END
         ],
       ),
-      // ✅ BODY (MAIN CONTENT AREA) END
-
-
-      // ✅ FLOATING ACTION BUTTON START
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showBottomSheet, // Opens Bottom Sheet
-        child: const Icon(Icons.add),
-      ),
-      // ✅ FLOATING ACTION BUTTON END
-
-
-      // ✅ BOTTOM NAVIGATION BAR START
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        items: const [
-          BottomNavigationBarItem(
-              icon: Icon(Icons.list), label: 'Tasks'), // Tab 0
-          BottomNavigationBarItem(
-              icon: Icon(Icons.done_all), label: 'Completed'), // Tab 1
-        ],
-        onTap: _onTabTapped,
-      ),
-      // ✅ BOTTOM NAVIGATION BAR END
     );
   }
-}
-// 🔹 TODO HOME PAGE END
+  /*──────────────────────────────
+   📁 DRAWER (FILE NAVIGATION) END
+  ──────────────────────────────*/
 
 
-
-// 🔹 ABOUT PAGE START
-class AboutPage extends StatelessWidget {
-  const AboutPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      // ✅ APPBAR START
-      appBar: AppBar(title: const Text('About App')),
-      // ✅ APPBAR END
-
-      // ✅ BODY START
-      body: const Center(
-        child: Text(
-          'This is a Todo App example.\nDeveloped in Flutter.',
-          textAlign: TextAlign.center,
+  /*──────────────────────────────
+   🧾 MAIN EDITOR AREA START (Center 70%)
+  ──────────────────────────────*/
+  Widget _buildEditorArea() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      color: Colors.grey[100],
+      child: TextField(
+        controller: _codeController,
+        maxLines: null,
+        expands: true,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+        ),
+        style: const TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 15,
+          color: Colors.black87,
         ),
       ),
-      // ✅ BODY END
     );
   }
-}
-// 🔹 ABOUT PAGE END
+  /*──────────────────────────────
+   🧾 MAIN EDITOR AREA END
+  ──────────────────────────────*/
 
 
+  /*──────────────────────────────
+   🧩 PERSISTENT BOTTOM SHEET START
+   - 10% visible always
+   - swipe to expand
+  ──────────────────────────────*/
+  Widget _buildBottomSheet() {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      height: isExpanded
+          ? MediaQuery.of(context).size.height * 0.4
+          : MediaQuery.of(context).size.height * 0.1,
+      decoration: BoxDecoration(
+        color: Colors.blueGrey[50],
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: const [
+          BoxShadow(blurRadius: 6, color: Colors.black26),
+        ],
+      ),
+      child: Column(
+        children: [
+          GestureDetector(
+            onTap: () => setState(() => isExpanded = !isExpanded),
+            child: Container(
+              width: 50,
+              height: 5,
+              margin: const EdgeInsets.only(top: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey[400],
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text("Console Output",
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          const Divider(),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(8),
+              child: const Text(
+                "Build running...\nNo errors found ✅",
+                style: TextStyle(fontFamily: 'monospace'),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  /*──────────────────────────────
+   🧩 PERSISTENT BOTTOM SHEET END
+  ──────────────────────────────*/
 
-// 🔹 SETTINGS PAGE START
-class SettingsPage extends StatelessWidget {
-  const SettingsPage({super.key});
 
+  /*──────────────────────────────
+   ⚙️ BUILD METHOD START
+  ──────────────────────────────*/
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // ✅ APPBAR START
-      appBar: AppBar(title: const Text('Settings')),
-      // ✅ APPBAR END
+      appBar: _buildAppBar(), // Toolbar
+      drawer: _buildDrawer(), // Side menu (file tree)
+      body: Stack(
+        children: [
+          // Main editor (70–80%)
+          Positioned.fill(
+            child: _buildEditorArea(),
+          ),
 
-      // ✅ BODY START
-      body: const Center(
-        child: Text('Settings Screen (Under Development)'),
+          // Bottom sheet fixed
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: _buildBottomSheet(),
+          ),
+        ],
       ),
-      // ✅ BODY END
     );
   }
+  /*──────────────────────────────
+   ⚙️ BUILD METHOD END
+  ──────────────────────────────*/
 }
-// 🔹 SETTINGS PAGE END
+/*──────────────────────────────
+ 🟩 HOME PAGE (MAIN SCREEN) END
+──────────────────────────────*/
