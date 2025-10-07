@@ -26,44 +26,50 @@ class CodeEditorHome extends StatefulWidget {
 }
 
 class _CodeEditorHomeState extends State<CodeEditorHome> {
-  List<String> files = [];
+  List<FileNode> fileTree = [];
   bool isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadZipFromAssets(); // App start hote hi zip load ho jayega
+    _loadZipFromAssets();
   }
 
-  // 🔹 ZIP FILE LOAD KARNE WALA FUNCTION
+  // 🔹 FILE NODE CLASS (TREE STRUCTURE KE LIYE)
+  class FileNode {
+    String name;
+    bool isExpanded;
+    bool isFile;
+    List<FileNode> children;
+    
+    FileNode({
+      required this.name,
+      required this.isFile,
+      this.isExpanded = false,
+      this.children = const [],
+    });
+  }
+
+  // 🔹 ZIP SE TREE BANAYE
   Future<void> _loadZipFromAssets() async {
     try {
-      print("Loading ZIP file from assets...");
-      
-      // 1. Assets se zip file load karo
       final ByteData data = await rootBundle.load('assets/Hello-World.zip');
-      
-      // 2. ZIP decode karo
       final Archive archive = ZipDecoder().decodeBytes(data.buffer.asUint8List());
       
-      // 3. Saari files list mein daalo (sorted)
+      // Root node banao
+      FileNode root = FileNode(name: 'Hello-World', isFile: false, isExpanded: true);
+      
+      // Har file ko tree mein add karo
+      for (var file in archive.files) {
+        if (file.name.isNotEmpty) {
+          _addToTree(root, file.name, file.isFile);
+        }
+      }
+      
       setState(() {
-        files = archive.files
-            .where((file) => file.name.isNotEmpty)
-            .map((file) {
-              if (file.isFile) {
-                return file.name;
-              } else {
-                return '${file.name}/';
-              }
-            })
-            .toList()
-          ..sort(); // Alphabetically sort karo
-          
+        fileTree = root.children;
         isLoading = false;
       });
-      
-      print("Total files loaded: ${files.length}");
       
     } catch (e) {
       print('Error loading zip: $e');
@@ -71,6 +77,91 @@ class _CodeEditorHomeState extends State<CodeEditorHome> {
         isLoading = false;
       });
     }
+  }
+
+  // 🔹 TREE STRUCTURE BANANE KA FUNCTION
+  void _addToTree(FileNode node, String filePath, bool isFile) {
+    List<String> parts = filePath.split('/').where((part) => part.isNotEmpty).toList();
+    
+    if (parts.isEmpty) return;
+    
+    String currentPart = parts.first;
+    String remainingPath = parts.sublist(1).join('/');
+    
+    // Check if child already exists
+    FileNode? existingChild = node.children.firstWhere(
+      (child) => child.name == currentPart,
+      orElse: () => FileNode(name: '', isFile: true), // dummy
+    );
+    
+    if (existingChild.name.isEmpty) {
+      // New child banao
+      existingChild = FileNode(
+        name: currentPart,
+        isFile: parts.length == 1 ? isFile : false,
+      );
+      node.children.add(existingChild);
+    }
+    
+    // Recursively process remaining path
+    if (remainingPath.isNotEmpty) {
+      _addToTree(existingChild, remainingPath, isFile);
+    }
+  }
+
+  // 🔹 TREE WIDGET (RECURSIVE)
+  Widget _buildTree(List<FileNode> nodes, [int level = 0]) {
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: nodes.length,
+      itemBuilder: (context, index) {
+        final node = nodes[index];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // FILE/FOLDER ITEM
+            Container(
+              padding: EdgeInsets.only(left: (level * 20.0) + 16.0),
+              child: ListTile(
+                leading: Icon(
+                  node.isFile ? Icons.insert_drive_file_outlined : Icons.folder,
+                  color: node.isFile ? Colors.blueGrey : Colors.amber,
+                ),
+                title: Text(
+                  node.name,
+                  style: TextStyle(
+                    fontWeight: node.isFile ? FontWeight.normal : FontWeight.bold,
+                  ),
+                ),
+                trailing: node.isFile ? null : Icon(
+                  node.isExpanded ? Icons.expand_less : Icons.expand_more,
+                ),
+                onTap: () {
+                  if (!node.isFile) {
+                    setState(() {
+                      node.isExpanded = !node.isExpanded;
+                    });
+                  } else {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Opened: ${node.name}")),
+                    );
+                  }
+                },
+                onLongPress: () {
+                  _showFileOptions(context, node.name, node.isFile);
+                },
+              ),
+            ),
+            
+            // CHILDREN (RECURSIVE)
+            if (!node.isFile && node.isExpanded && node.children.isNotEmpty)
+              _buildTree(node.children, level + 1),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -102,45 +193,20 @@ class _CodeEditorHomeState extends State<CodeEditorHome> {
           ),
           const Divider(),
           
-          // File List
+          // File Tree
           if (isLoading)
             const Center(child: CircularProgressIndicator())
           else
             Expanded(
-              child: ListView(
-                children: [
-                  for (var file in files)
-                    ListTile(
-                      leading: Icon(
-                        file.endsWith('/') ? Icons.folder : Icons.insert_drive_file_outlined,
-                        color: file.endsWith('/') ? Colors.amber : Colors.blueGrey,
-                      ),
-                      title: Text(
-                        file,
-                        style: TextStyle(
-                          fontWeight: file.endsWith('/') ? FontWeight.bold : FontWeight.normal,
-                        ),
-                      ),
-                      onTap: () {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text("Opened: $file")),
-                        );
-                      },
-                      onLongPress: () {
-                        _showFileOptions(context, file);
-                      },
-                    ),
-                ],
-              ),
+              child: _buildTree(fileTree),
             ),
         ],
       ),
     );
   }
 
-  // 🔹 BAKI SAB POPUP FUNCTIONS YAHAN SE START (SAME RAHEGA)
-  void _showFileOptions(BuildContext context, String fileName) {
+  // 🔹 BAKI SAB POPUP FUNCTIONS (SAME RAHEGA)
+  void _showFileOptions(BuildContext context, String fileName, bool isFile) {
     showModalBottomSheet(
       context: context,
       builder: (context) {
@@ -229,12 +295,7 @@ class _CodeEditorHomeState extends State<CodeEditorHome> {
           ),
           TextButton(
             onPressed: () {
-              setState(() {
-                String newItem = nameController.text.trim();
-                if (newItem.isNotEmpty) {
-                  files.add(isFile ? newItem : "$newItem/");
-                }
-              });
+              // Yahan new file/folder add karna hoga tree mein
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text("${isFile ? 'File' : 'Folder'} created")),
@@ -249,7 +310,7 @@ class _CodeEditorHomeState extends State<CodeEditorHome> {
 
   void _showRenameDialog(BuildContext context, String oldName) {
     final TextEditingController renameController =
-        TextEditingController(text: oldName.replaceAll("/", ""));
+        TextEditingController(text: oldName);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -265,14 +326,6 @@ class _CodeEditorHomeState extends State<CodeEditorHome> {
           ),
           TextButton(
             onPressed: () {
-              setState(() {
-                int index = files.indexOf(oldName);
-                if (index != -1) {
-                  files[index] = oldName.endsWith('/')
-                      ? "${renameController.text}/"
-                      : renameController.text;
-                }
-              });
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Renamed successfully')),
@@ -298,9 +351,6 @@ class _CodeEditorHomeState extends State<CodeEditorHome> {
           ),
           TextButton(
             onPressed: () {
-              setState(() {
-                files.remove(fileName);
-              });
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Deleted successfully')),
