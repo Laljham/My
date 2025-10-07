@@ -1,17 +1,17 @@
-name: Flutter IDE
+name: helloworld
 description: A new Flutter project.
 publish_to: 'none'
 
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'  # ✅ CHANGE THIS LINE
+  sdk: ^3.0.0
 
 dependencies:
   flutter:
     sdk: flutter
-  archive: ^3.3.0  
-  path: ^1.8.0  
+  archive: ^3.3.0    # ✅ Same level pe hona chahiye
+  path: ^1.8.0       # ✅ Same level pe hona chahiye
 
 dev_dependencies:
   flutter_test:
