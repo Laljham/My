@@ -2,170 +2,112 @@ name: 🚀 Build & Deploy Flutter Web
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v4
+    - name: 🚀 Checkout Code
+      uses: actions/checkout@v4
     
     - name: ⚡ Setup Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.24.0'
+        flutter-version: '3.22.0'
+        channel: 'stable'
     
-    - name: 📦 Install Dependencies
-      run: flutter pub get
+    - name: 📦 Enable Web & Install Dependencies
+      run: |
+        flutter config --enable-web
+        flutter pub get
     
     - name: 🌐 Build Flutter Web
       run: |
         flutter build web --release --web-renderer html
-        
-    - name: 📊 Create Enhanced Preview Page
+    
+    - name: 📊 Create Status Page
       run: |
         cd build/web
-        cat > index.html << 'HTML'
+        cat > status.html << 'HTML'
 <!DOCTYPE html>
 <html>
 <head>
-    <title>My Flutter App - Live Preview</title>
+    <title>🚀 Build Successful</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { 
+        body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             min-height: 100vh;
         }
         .container {
-            max-width: 1200px;
-            margin: 0 auto;
             background: white;
+            padding: 40px;
             border-radius: 15px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            overflow: hidden;
-        }
-        .header {
-            background: linear-gradient(135deg, #4CAF50, #45a049);
-            color: white;
-            padding: 30px;
             text-align: center;
+            max-width: 500px;
         }
-        .preview-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 30px;
+        .success {
+            color: #4CAF50;
+            font-size: 48px;
+            margin-bottom: 20px;
         }
-        .app-frame {
-            width: 100%;
-            max-width: 400px;
-            height: 700px;
-            border: 2px solid #ddd;
-            border-radius: 20px;
-            overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            margin: 20px 0;
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
         }
-        .app-frame iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-        }
-        .info-panel {
+        .info {
             background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            margin: 20px 0;
-            width: 100%;
-            max-width: 400px;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            text-align: left;
         }
         .btn {
+            display: inline-block;
             background: #007bff;
             color: white;
             padding: 12px 24px;
             text-decoration: none;
-            border-radius: 25px;
-            margin: 5px;
-            display: inline-block;
-            transition: transform 0.2s;
+            border-radius: 6px;
+            margin: 10px 5px;
+            transition: background 0.3s;
         }
         .btn:hover {
-            transform: translateY(-2px);
+            background: #0056b3;
         }
-        .build-status {
-            padding: 10px;
-            border-radius: 5px;
-            margin: 10px 0;
-            font-weight: bold;
-        }
-        .success { background: #d4edda; color: #155724; }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>🚀 My Flutter App</h1>
-            <p>Live Web Preview - Auto Deployed</p>
+        <div class="success">✅</div>
+        <h1>Build Successful!</h1>
+        <p>Your Flutter web app has been deployed successfully.</p>
+        
+        <div class="info">
+            <strong>📦 Build Information:</strong><br>
+            Commit: <span id="commit-sha"></span><br>
+            Time: <span id="build-time"></span>
         </div>
         
-        <div class="preview-container">
-            <div class="build-status success">
-                ✅ Build Successful - ${{ github.sha }}
-            </div>
-            
-            <h2>📱 App Preview</h2>
-            <p>Your Flutter app running in browser:</p>
-            
-            <div class="app-frame">
-                <iframe src="https://laljham.github.io/My/" 
-                        title="Flutter App Preview"
-                        sandbox="allow-scripts allow-same-origin allow-forms">
-                </iframe>
-            </div>
-            
-            <div class="info-panel">
-                <h3>📋 Build Information</h3>
-                <p><strong>Commit:</strong> ${{ github.sha }}</p>
-                <p><strong>Branch:</strong> ${{ github.ref }}</p>
-                <p><strong>Deployed:</strong> <span id="current-time"></span></p>
-                <p><strong>Triggered by:</strong> ${{ github.actor }}</p>
-            </div>
-            
-            <div class="info-panel">
-                <h3>📝 Latest Changes</h3>
-                <pre style="background: white; padding: 15px; border-radius: 5px; overflow-x: auto;">
-${{ github.event.head_commit.message }}
-                </pre>
-            </div>
-            
-            <div style="text-align: center; margin: 20px 0;">
-                <a href="https://github.com/${{ github.repository }}/actions" class="btn">
-                    📊 View Build Logs
-                </a>
-                <a href="https://github.com/${{ github.repository }}" class="btn">
-                    💻 Source Code
-                </a>
-                <a href="https://laljham.github.io/My/" target="_blank" class="btn">
-                    🔗 Open Full Screen
-                </a>
-            </div>
+        <div>
+            <a href="index.html" class="btn">🎯 Open App</a>
+            <a href="https://github.com/${{ github.repository }}/actions" class="btn">📊 Build Logs</a>
         </div>
     </div>
 
     <script>
-        // Update current time
-        document.getElementById('current-time').textContent = new Date().toLocaleString();
-        
-        // Auto-refresh preview every 30 seconds
-        setInterval(() => {
-            const iframe = document.querySelector('iframe');
-            iframe.src = iframe.src; // Refresh iframe
-        }, 30000);
+        document.getElementById('commit-sha').textContent = '${{ github.sha }}'.substring(0, 7);
+        document.getElementById('build-time').textContent = new Date().toLocaleString();
     </script>
 </body>
 </html>
