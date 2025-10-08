@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:archive/archive.dart';
 import '../models/file_node.dart';
-import '../services/github_service.dart'; // GitHub service import
+import '../services/github_service.dart'; // 🔹 Import kar lein apni GitHub service
 
 class CodeEditorScreen extends StatefulWidget {
   const CodeEditorScreen({super.key});
@@ -18,10 +18,6 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   TextEditingController codeController = TextEditingController();
   DraggableScrollableController bottomSheetController = DraggableScrollableController();
 
-  // GitHub push state
-  bool _isPushing = false;
-  String _pushStatus = "";
-
   @override
   void initState() {
     super.initState();
@@ -35,7 +31,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
     super.dispose();
   }
 
-  // ZIP file load from assets and build file tree
+  // 🔹 ZIP SE TREE BANAYE
   Future<void> _loadZipFromAssets() async {
     try {
       final ByteData data = await rootBundle.load('assets/Hello-World.zip');
@@ -112,7 +108,6 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
     }
   }
 
-  // Build tree view for drawer
   Widget _buildTree(List<FileNode> nodes, [int level = 0]) {
     return ListView.builder(
       shrinkWrap: true,
@@ -132,6 +127,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
                 dense: true,
                 visualDensity: VisualDensity.compact,
                 minLeadingWidth: 0,
+
                 title: Row(
                   children: [
                     if (!node.isFile)
@@ -143,12 +139,14 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
                           color: Colors.grey[700],
                         ),
                       ),
+
                     Icon(
                       node.isFile ? Icons.insert_drive_file_outlined : Icons.folder,
                       color: node.isFile ? Colors.blueGrey : Colors.amber,
                       size: 18,
                     ),
                     const SizedBox(width: 6),
+
                     Expanded(
                       child: Text(
                         node.name,
@@ -160,6 +158,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
                     ),
                   ],
                 ),
+
                 onTap: () {
                   if (!node.isFile) {
                     setState(() {
@@ -182,35 +181,6 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
     );
   }
 
-  // GitHub Push function
-  Future<void> _pushToGitHub() async {
-    setState(() {
-      _isPushing = true;
-      _pushStatus = "Pushing ZIP to GitHub...";
-    });
-
-    try {
-      await GitHubService.pushZipFromAssets();
-      setState(() {
-        _pushStatus = "✅ Push completed successfully!";
-      });
-    } catch (e) {
-      setState(() {
-        _pushStatus = "❌ Error: $e";
-      });
-    } finally {
-      setState(() {
-        _isPushing = false;
-      });
-
-      if (_pushStatus.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_pushStatus)),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -218,22 +188,51 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
         title: const Text("📂 Flutter Code Editor"),
         backgroundColor: Colors.indigo,
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12.0),
-            child: _isPushing
-                ? const Center(
-                    child: SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                    ),
-                  )
-                : IconButton(
-                    icon: const Icon(Icons.cloud_upload),
-                    tooltip: 'Push to GitHub',
-                    onPressed: _pushToGitHub,
+          // 🔹 GitHub Push Button
+          IconButton(
+            icon: const Icon(Icons.cloud_upload),
+            tooltip: 'Push to GitHub',
+            onPressed: () async {
+              // Show loading indicator
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => const Center(
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
                   ),
+                ),
+              );
+
+              try {
+                await GitHubService.pushZipFromAssets();
+                Navigator.pop(context); // Close loading dialog
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('✅ Successfully pushed to GitHub!'),
+                      backgroundColor: Colors.green,
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
+                }
+              } catch (e) {
+                Navigator.pop(context); // Close loading dialog
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('❌ Error: $e'),
+                      backgroundColor: Colors.red,
+                      duration: const Duration(seconds: 4),
+                    ),
+                  );
+                }
+              }
+            },
           ),
+          const SizedBox(width: 8),
         ],
       ),
       drawer: _buildDrawer(),
@@ -364,4 +363,214 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
                             title: const Text('Debug'),
                             trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                             onTap: () {
-                              ScaffoldMessenger.of(context).show
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Debug panel opened')),
+                              );
+                            },
+                          ),
+                          ListTile(
+                            leading: const Icon(Icons.search),
+                            title: const Text('Search in Files'),
+                            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Search opened')),
+                              );
+                            },
+                          ),
+                          ListTile(
+                            leading: const Icon(Icons.settings),
+                            title: const Text('Settings'),
+                            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Settings opened')),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDrawer() {
+    return Drawer(
+      child: Column(
+        children: [
+          if (isLoading)
+            const Expanded(child: Center(child: CircularProgressIndicator()))
+          else
+            Expanded(
+              child: SingleChildScrollView(
+                child: _buildTree(fileTree),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showFileOptions(BuildContext context, String fileName, bool isFile) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.create_new_folder_outlined),
+                title: const Text('New'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showNewPopup(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.edit),
+                title: const Text('Rename'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showRenameDialog(context, fileName);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text('Delete'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _deleteFile(fileName);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showNewPopup(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.insert_drive_file),
+                title: const Text('File'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showCreateDialog(context, isFile: true);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.folder),
+                title: const Text('Directory'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showCreateDialog(context, isFile: false);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showCreateDialog(BuildContext context, {required bool isFile}) {
+    final TextEditingController nameController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isFile ? 'Create File' : 'Create Folder'),
+        content: TextField(
+          controller: nameController,
+          decoration: InputDecoration(
+            hintText: isFile ? 'File name' : 'Folder name',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text("${isFile ? 'File' : 'Folder'} created")),
+              );
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRenameDialog(BuildContext context, String oldName) {
+    final TextEditingController renameController =
+        TextEditingController(text: oldName);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rename'),
+        content: TextField(
+          controller: renameController,
+          decoration: const InputDecoration(hintText: 'Enter new name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Renamed successfully')),
+              );
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteFile(String fileName) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete'),
+        content: Text('Do you want to delete "$fileName"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Deleted successfully')),
+              );
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+}
