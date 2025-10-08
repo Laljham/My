@@ -10,27 +10,30 @@ class CodeEditorScreen extends StatefulWidget {
   State<CodeEditorScreen> createState() => _CodeEditorScreenState();
 }
 
-class _CodeEditorScreenState extends State<CodeEditorScreen> {
+class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProviderStateMixin {
   List<FileNode> fileTree = [];
   bool isLoading = true;
   FileNode? selectedFile;
   TextEditingController codeController = TextEditingController();
   DraggableScrollableController bottomSheetController = DraggableScrollableController();
+  late TabController tabController;
+  List<String> openedFiles = [];
 
   @override
   void initState() {
     super.initState();
     _loadZipFromAssets();
+    tabController = TabController(length: 1, vsync: this);
   }
 
   @override
   void dispose() {
     codeController.dispose();
     bottomSheetController.dispose();
+    tabController.dispose();
     super.dispose();
   }
 
-  // 🔹 ZIP SE TREE BANAYE
   Future<void> _loadZipFromAssets() async {
     try {
       final ByteData data = await rootBundle.load('assets/Hello-World.zip');
@@ -84,7 +87,8 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
         content: parts.length == 1 && isFile ? content : null,
         children: [],
       );
-      node.children = [...node.children, existingChild];
+      // 🔹 Preserve zip order
+      node.children.add(existingChild);
     }
 
     if (parts.length > 1) {
@@ -97,6 +101,8 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
       setState(() {
         selectedFile = node;
         codeController.text = node.content ?? '';
+        if (!openedFiles.contains(node.fullPath)) openedFiles.add(node.fullPath);
+        tabController = TabController(length: openedFiles.length, vsync: this);
       });
 
       codeController.addListener(() {
@@ -107,7 +113,6 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
     }
   }
 
-  // 🔹 (Start edit) Updated _buildTree with left arrow + less gap
   Widget _buildTree(List<FileNode> nodes, [int level = 0]) {
     return ListView.builder(
       shrinkWrap: true,
@@ -122,32 +127,28 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
           children: [
             Container(
               color: isSelected ? Colors.blue.withOpacity(0.2) : null,
-              padding: EdgeInsets.only(left: level * 10.0, right: 8, top: 2.0, bottom: 2.0), // 🔹 Reduced gap
+              padding: EdgeInsets.only(left: level * 10.0, right: 8, top: 2.0, bottom: 2.0),
               child: ListTile(
                 dense: true,
                 visualDensity: VisualDensity.compact,
                 minLeadingWidth: 0,
-
-                // 🔹 Custom Row layout (arrow + icon + name)
                 title: Row(
                   children: [
                     if (!node.isFile)
                       Padding(
                         padding: const EdgeInsets.only(right: 4.0),
                         child: Icon(
-                          node.isExpanded ? Icons.expand_more : Icons.expand_left,
+                          node.isExpanded ? Icons.arrow_drop_down : Icons.arrow_right,
                           size: 20,
                           color: Colors.grey[700],
                         ),
                       ),
-
                     Icon(
                       node.isFile ? Icons.insert_drive_file_outlined : Icons.folder,
-                      color: node.isFile ? Colors.blueGrey : Colors.blueGrey,
+                      color: Colors.white,
                       size: 18,
                     ),
                     const SizedBox(width: 6),
-
                     Expanded(
                       child: Text(
                         node.name,
@@ -159,7 +160,6 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
                     ),
                   ],
                 ),
-
                 onTap: () {
                   if (!node.isFile) {
                     setState(() {
@@ -181,7 +181,6 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
       },
     );
   }
-  // 🔹 (End edit)
 
   @override
   Widget build(BuildContext context) {
@@ -190,84 +189,71 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
         title: const Text("📂 Flutter Code Editor"),
         backgroundColor: Colors.indigo,
       ),
-      drawer: _buildDrawer(), // 🔹 Drawer title bar remove kiya gaya hai niche
-      body: Stack(
+      drawer: _buildDrawer(),
+      body: Column(
         children: [
-          // Main Code Editor Area
-          Container(
-            padding: const EdgeInsets.all(16),
-            child: selectedFile == null
-                ? const Center(
-                    child: Text(
-                      "Select a file from drawer to edit",
-                      style: TextStyle(fontSize: 16, color: Colors.grey),
-                    ),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // File Name Header
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.edit_document, size: 20),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                selectedFile!.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close),
-                              onPressed: () {
-                                setState(() {
-                                  selectedFile = null;
-                                  codeController.clear();
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
+          // 🔹 TabBar for opened files
+          if (openedFiles.isNotEmpty)
+            Container(
+              color: Colors.grey[200],
+              height: 40,
+              child: TabBar(
+                controller: tabController,
+                isScrollable: true,
+                labelColor: Colors.black,
+                unselectedLabelColor: Colors.grey,
+                indicatorColor: Colors.blue,
+                tabs: openedFiles.map((f) => Tab(text: f.split('/').last)).toList(),
+                onTap: (index) {
+                  // Switch file
+                  String path = openedFiles[index];
+                  FileNode? node = _findNodeByPath(fileTree, path);
+                  if (node != null) _onFileSelected(node);
+                },
+              ),
+            ),
 
-                      // Code Editor
-                      Expanded(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade300),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: TextField(
-                            controller: codeController,
-                            maxLines: null,
-                            expands: true,
-                            style: const TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 14,
-                            ),
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.all(12),
-                              hintText: 'Start coding...',
-                            ),
-                          ),
-                        ),
+          // 🔹 Editor area with line numbers
+          Expanded(
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  color: Colors.grey[200],
+                  child: SingleChildScrollView(
+                    controller: ScrollController(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: List.generate(
+                        codeController.text.split('\n').length,
+                        (index) => Text('${index + 1}', style: const TextStyle(color: Colors.grey)),
                       ),
-                    ],
+                    ),
                   ),
+                ),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    child: TextField(
+                      controller: codeController,
+                      maxLines: null,
+                      expands: true,
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        hintText: 'Start coding...',
+                      ),
+                      onChanged: (_) {
+                        setState(() {}); // Update line numbers
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
 
-          // Bottom Sheet same as before
+          // 🔹 Bottom Sheet with shortcut buttons
           DraggableScrollableSheet(
             controller: bottomSheetController,
             initialChildSize: 0.1,
@@ -298,6 +284,15 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
                         color: Colors.grey[300],
                         borderRadius: BorderRadius.circular(2),
                       ),
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        ElevatedButton(onPressed: () {}, child: const Text('Ctrl')),
+                        ElevatedButton(onPressed: () {}, child: const Text('Alt')),
+                        ElevatedButton(onPressed: () {}, child: const Text('Shift')),
+                        ElevatedButton(onPressed: () {}, child: const Text('Run')),
+                      ],
                     ),
                     Expanded(
                       child: ListView(
@@ -356,33 +351,10 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
     );
   }
 
-  // 🔹 (Start edit) Drawer ka top bar hata diya gaya
   Widget _buildDrawer() {
     return Drawer(
       child: Column(
         children: [
-          // ❌ Ye pura container hataya gaya hai (Indigo title bar)
-          // Container(
-          //   padding: const EdgeInsets.all(16),
-          //   color: Colors.indigo,
-          //   child: const SafeArea(
-          //     child: Row(
-          //       children: [
-          //         Icon(Icons.folder_open, color: Colors.white),
-          //         SizedBox(width: 12),
-          //         Text(
-          //           "Project Files",
-          //           style: TextStyle(
-          //             fontSize: 18,
-          //             fontWeight: FontWeight.bold,
-          //             color: Colors.white,
-          //           ),
-          //         ),
-          //       ],
-          //     ),
-          //   ),
-          // ),
-
           if (isLoading)
             const Expanded(child: Center(child: CircularProgressIndicator()))
           else
@@ -395,9 +367,18 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
       ),
     );
   }
-  // 🔹 (End edit)
 
-  // 🔹 Rest dialogs and functions remain unchanged below
+  FileNode? _findNodeByPath(List<FileNode> nodes, String path) {
+    for (var node in nodes) {
+      if (node.fullPath == path) return node;
+      if (!node.isFile) {
+        var child = _findNodeByPath(node.children, path);
+        if (child != null) return child;
+      }
+    }
+    return null;
+  }
+
   void _showFileOptions(BuildContext context, String fileName, bool isFile) {
     showModalBottomSheet(
       context: context,
@@ -413,144 +394,3 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
                   Navigator.pop(context);
                   _showNewPopup(context);
                 },
-              ),
-              ListTile(
-                leading: const Icon(Icons.edit),
-                title: const Text('Rename'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showRenameDialog(context, fileName);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.delete_outline, color: Colors.red),
-                title: const Text('Delete'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _deleteFile(fileName);
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showNewPopup(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.insert_drive_file),
-                title: const Text('File'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showCreateDialog(context, isFile: true);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.folder),
-                title: const Text('Directory'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showCreateDialog(context, isFile: false);
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showCreateDialog(BuildContext context, {required bool isFile}) {
-    final TextEditingController nameController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(isFile ? 'Create File' : 'Create Folder'),
-        content: TextField(
-          controller: nameController,
-          decoration: InputDecoration(
-            hintText: isFile ? 'File name' : 'Folder name',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text("${isFile ? 'File' : 'Folder'} created")),
-              );
-            },
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showRenameDialog(BuildContext context, String oldName) {
-    final TextEditingController renameController =
-        TextEditingController(text: oldName);
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Rename'),
-        content: TextField(
-          controller: renameController,
-          decoration: const InputDecoration(hintText: 'Enter new name'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Renamed successfully')),
-              );
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _deleteFile(String fileName) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete'),
-        content: Text('Do you want to delete "$fileName"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Deleted successfully')),
-              );
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-  }
-}
