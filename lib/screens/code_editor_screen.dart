@@ -19,7 +19,6 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
   TabController? tabController;
   List<String> openedFiles = [];
   
-  // 🔹 Scroll controllers for sync
   ScrollController lineNumberController = ScrollController();
   ScrollController codeScrollController = ScrollController();
 
@@ -28,7 +27,6 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
     super.initState();
     _loadZipFromAssets();
     
-    // Sync scroll
     codeScrollController.addListener(() {
       if (lineNumberController.hasClients) {
         lineNumberController.jumpTo(codeScrollController.offset);
@@ -48,15 +46,22 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
 
   Future<void> _loadZipFromAssets() async {
     try {
-      print('🔄 Loading zip...');
+      print('🔄 Loading zip file...');
       final ByteData data = await rootBundle.load('assets/Hello-World.zip');
       print('✅ Zip loaded: ${data.lengthInBytes} bytes');
       
       final Archive archive = ZipDecoder().decodeBytes(data.buffer.asUint8List());
-      print('✅ Files in zip: ${archive.files.length}');
+      print('✅ Total files in zip: ${archive.files.length}');
 
-      FileNode root = FileNode(name: 'Hello-World', fullPath: '', isFile: false, isExpanded: true);
+      FileNode root = FileNode(
+        name: 'Hello-World',
+        fullPath: '',
+        isFile: false,
+        isExpanded: true,
+        children: [],
+      );
 
+      int processedCount = 0;
       for (var file in archive.files) {
         if (file.name.isNotEmpty && !file.name.endsWith('/')) {
           String content = '';
@@ -68,20 +73,42 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
             }
           }
           _addToTree(root, file.name, file.isFile, content);
+          processedCount++;
         }
       }
+
+      print('✅ Processed $processedCount files');
+      print('✅ Root has ${root.children.length} children');
 
       setState(() {
         fileTree = root.children;
         isLoading = false;
       });
       
-      print('✅ Tree ready with ${fileTree.length} items');
-    } catch (e) {
-      print('❌ Error: $e');
+      print('✅ File tree ready!');
+    } catch (e, stackTrace) {
+      print('❌ Error loading zip: $e');
+      print('❌ Stack trace: $stackTrace');
+      
       setState(() {
         isLoading = false;
       });
+      
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Error'),
+            content: Text('Failed to load zip file:\n$e\n\nCheck console for details.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
     }
   }
 
@@ -124,7 +151,6 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
         if (!openedFiles.contains(node.fullPath)) {
           openedFiles.add(node.fullPath);
           
-          // 🔹 Recreate TabController only when tabs change
           tabController?.dispose();
           tabController = TabController(
             length: openedFiles.length,
@@ -132,7 +158,6 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
             initialIndex: openedFiles.length - 1,
           );
         } else {
-          // Switch to existing tab
           int index = openedFiles.indexOf(node.fullPath);
           tabController?.animateTo(index);
         }
@@ -159,7 +184,6 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
         tabController?.dispose();
         tabController = TabController(length: openedFiles.length, vsync: this);
         
-        // Select last file
         FileNode? lastNode = _findNodeByPath(fileTree, openedFiles.last);
         if (lastNode != null) {
           selectedFile = lastNode;
@@ -196,7 +220,12 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
               },
               child: Container(
                 color: isSelected ? Colors.blue.withOpacity(0.2) : null,
-                padding: EdgeInsets.only(left: level * 12.0 + 8, right: 8, top: 6, bottom: 6),
+                padding: EdgeInsets.only(
+                  left: level * 12.0 + 8,
+                  right: 8,
+                  top: 6,
+                  bottom: 6,
+                ),
                 child: Row(
                   children: [
                     if (!node.isFile)
@@ -209,7 +238,9 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
                       const SizedBox(width: 18),
                     const SizedBox(width: 4),
                     Icon(
-                      node.isFile ? Icons.insert_drive_file_outlined : Icons.folder,
+                      node.isFile 
+                        ? Icons.insert_drive_file_outlined 
+                        : Icons.folder,
                       color: node.isFile ? Colors.grey[700] : Colors.amber[700],
                       size: 16,
                     ),
@@ -221,6 +252,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
                           fontWeight: node.isFile ? FontWeight.normal : FontWeight.w600,
                           fontSize: 13,
                         ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -245,10 +277,8 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
       drawer: _buildDrawer(),
       body: Stack(
         children: [
-          // Main editor area
           Column(
             children: [
-              // 🔹 TabBar for opened files
               if (openedFiles.isNotEmpty && tabController != null)
                 Container(
                   color: Colors.grey[200],
@@ -286,13 +316,16 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
                   ),
                 ),
 
-              // 🔹 Editor area with line numbers
               Expanded(
                 child: selectedFile == null
-                    ? const Center(child: Text('Select a file from drawer'))
+                    ? const Center(
+                        child: Text(
+                          'Select a file from drawer',
+                          style: TextStyle(fontSize: 16, color: Colors.grey),
+                        ),
+                      )
                     : Row(
                         children: [
-                          // Line numbers
                           Container(
                             width: 50,
                             color: Colors.grey[200],
@@ -317,7 +350,6 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
                               },
                             ),
                           ),
-                          // Code editor
                           Expanded(
                             child: TextField(
                               controller: codeController,
@@ -334,7 +366,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
                                 hintText: 'Start coding...',
                               ),
                               onChanged: (_) {
-                                setState(() {}); // Update line numbers
+                                setState(() {});
                               },
                             ),
                           ),
@@ -344,7 +376,6 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
             ],
           ),
 
-          // 🔹 Bottom Sheet
           DraggableScrollableSheet(
             controller: bottomSheetController,
             initialChildSize: 0.1,
@@ -356,7 +387,9 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
               return Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(20),
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.1),
@@ -379,10 +412,22 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        ElevatedButton(onPressed: () {}, child: const Text('Ctrl')),
-                        ElevatedButton(onPressed: () {}, child: const Text('Alt')),
-                        ElevatedButton(onPressed: () {}, child: const Text('Shift')),
-                        ElevatedButton(onPressed: () {}, child: const Text('Run')),
+                        ElevatedButton(
+                          onPressed: () {},
+                          child: const Text('Ctrl'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {},
+                          child: const Text('Alt'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {},
+                          child: const Text('Shift'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {},
+                          child: const Text('Run'),
+                        ),
                       ],
                     ),
                     Expanded(
@@ -392,17 +437,42 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
                           ListTile(
                             leading: const Icon(Icons.terminal),
                             title: const Text('Terminal'),
-                            onTap: () {},
+                            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Terminal opened')),
+                              );
+                            },
                           ),
                           ListTile(
                             leading: const Icon(Icons.bug_report),
                             title: const Text('Debug'),
-                            onTap: () {},
+                            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Debug panel opened')),
+                              );
+                            },
                           ),
                           ListTile(
                             leading: const Icon(Icons.search),
-                            title: const Text('Search'),
-                            onTap: () {},
+                            title: const Text('Search in Files'),
+                            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Search opened')),
+                              );
+                            },
+                          ),
+                          ListTile(
+                            leading: const Icon(Icons.settings),
+                            title: const Text('Settings'),
+                            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Settings opened')),
+                              );
+                            },
                           ),
                         ],
                       ),
@@ -424,27 +494,52 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
           Container(
             padding: const EdgeInsets.all(16),
             margin: const EdgeInsets.only(top: 40),
+            color: Colors.indigo[50],
             child: Row(
               children: [
-                const Icon(Icons.folder, color: Colors.amber),
+                const Icon(Icons.folder, color: Colors.amber, size: 24),
                 const SizedBox(width: 8),
-                Text('Files: ${fileTree.length}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                  'Files: ${fileTree.length}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
               ],
             ),
           ),
-          const Divider(),
+          const Divider(height: 1),
           if (isLoading)
-            const Expanded(child: Center(child: CircularProgressIndicator()))
-          else if (fileTree.isEmpty)
             const Expanded(
               child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    CircularProgressIndicator(),
                     SizedBox(height: 16),
-                    Text('No files found'),
-                    Text('Check console', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    Text('Loading files...'),
+                  ],
+                ),
+              ),
+            )
+          else if (fileTree.isEmpty)
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'No files found!',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Check console for errors',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
                   ],
                 ),
               ),
@@ -480,109 +575,4 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.create_new_folder_outlined),
-                title: const Text('New'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showNewPopup(context);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.edit),
-                title: const Text('Rename'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showRenameDialog(context, fileName);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.delete_outline, color: Colors.red),
-                title: const Text('Delete'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _deleteFile(fileName);
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showNewPopup(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.insert_drive_file),
-                title: const Text('File'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showCreateDialog(context, isFile: true);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.folder),
-                title: const Text('Directory'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showCreateDialog(context, isFile: false);
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showCreateDialog(BuildContext context, {required bool isFile}) {
-    final TextEditingController nameController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(isFile ? 'Create File' : 'Create Folder'),
-        content: TextField(
-          controller: nameController,
-          decoration: InputDecoration(
-            hintText: isFile ? 'File name' : 'Folder name',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text("${isFile ? 'File' : 'Folder'} created")),
-              );
-            },
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showRenameDialog(BuildContext context, String oldName) {
-    final TextEditingController renameController = TextEditingController(text: oldName);
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Rename'),
-        content: TextField(
-          controller: renameController,
-          decoration: const InputDecoration(hintText: 'Enter new name'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const
+                leading:
