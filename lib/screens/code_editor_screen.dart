@@ -16,17 +16,28 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   FileNode? selectedFile;
   TextEditingController codeController = TextEditingController();
   DraggableScrollableController bottomSheetController = DraggableScrollableController();
+  ScrollController lineNumberController = ScrollController();
+  ScrollController codeScrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _loadZipFromAssets();
+    
+    // Sync scroll between line numbers and code
+    codeScrollController.addListener(() {
+      if (lineNumberController.hasClients) {
+        lineNumberController.jumpTo(codeScrollController.offset);
+      }
+    });
   }
 
   @override
   void dispose() {
     codeController.dispose();
     bottomSheetController.dispose();
+    lineNumberController.dispose();
+    codeScrollController.dispose();
     super.dispose();
   }
 
@@ -36,7 +47,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
       final ByteData data = await rootBundle.load('assets/Hello-World.zip');
       final Archive archive = ZipDecoder().decodeBytes(data.buffer.asUint8List());
       
-      FileNode root = FileNode(name: 'Hello-World', fullPath: '', isFile: false, isExpanded: true);
+      FileNode root = FileNode(name: 'Root', fullPath: '', isFile: false, isExpanded: true);
       
       for (var file in archive.files) {
         if (file.name.isNotEmpty && !file.name.endsWith('/')) {
@@ -112,7 +123,67 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
     }
   }
 
-  // 🔹 TREE WIDGET (RECURSIVE)
+  // 🔹 LINE NUMBERS KE SAATH CODE EDITOR
+  Widget _buildCodeEditorWithLineNumbers() {
+    int lineCount = '\n'.allMatches(codeController.text).length + 1;
+    
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Line Numbers
+        Container(
+          width: 50,
+          color: Colors.grey[900],
+          child: ListView.builder(
+            controller: lineNumberController,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: lineCount,
+            itemBuilder: (context, index) {
+              return Container(
+                height: 20,
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.only(right: 8),
+                child: Text(
+                  '${index + 1}',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 12,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        
+        // Code Editor
+        Expanded(
+          child: Container(
+            color: Colors.grey[850],
+            child: TextField(
+              controller: codeController,
+              scrollController: codeScrollController,
+              maxLines: null,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 14,
+                color: Colors.white,
+                height: 1.43, // Match line number height
+              ),
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                hintText: 'Start coding...',
+                hintStyle: TextStyle(color: Colors.grey),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 🔹 TREE WIDGET (VS CODE STYLE - COMPACT)
   Widget _buildTree(List<FileNode> nodes, [int level = 0]) {
     return ListView.builder(
       shrinkWrap: true,
@@ -125,42 +196,71 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              color: isSelected ? Colors.blue.withOpacity(0.2) : null,
-              padding: EdgeInsets.only(left: (level * 16.0)),
-              child: ListTile(
-                dense: true,
-                leading: Icon(
-                  node.isFile ? Icons.insert_drive_file_outlined : Icons.folder,
-                  color: node.isFile ? Colors.blueGrey : Colors.amber,
-                  size: 20,
+            InkWell(
+              onTap: () {
+                if (!node.isFile) {
+                  setState(() {
+                    node.isExpanded = !node.isExpanded;
+                  });
+                } else {
+                  _onFileSelected(node);
+                }
+              },
+              onLongPress: () {
+                _showFileOptions(context, node.name, node.isFile);
+              },
+              child: Container(
+                color: isSelected ? Colors.grey[800] : null,
+                padding: EdgeInsets.only(
+                  left: (level * 12.0) + 4.0,
+                  top: 4,
+                  bottom: 4,
                 ),
-                title: Text(
-                  node.name,
-                  style: TextStyle(
-                    fontWeight: node.isFile ? FontWeight.normal : FontWeight.w600,
-                    fontSize: 14,
-                  ),
+                child: Row(
+                  children: [
+                    // Expand/Collapse Arrow (LEFT SIDE)
+                    if (!node.isFile)
+                      Icon(
+                        node.isExpanded 
+                          ? Icons.keyboard_arrow_down 
+                          : Icons.keyboard_arrow_right,
+                        size: 16,
+                        color: Colors.grey[400],
+                      )
+                    else
+                      const SizedBox(width: 16),
+                    
+                    const SizedBox(width: 4),
+                    
+                    // Folder/File Icon
+                    Icon(
+                      node.isFile 
+                        ? Icons.insert_drive_file_outlined 
+                        : (node.isExpanded ? Icons.folder_open : Icons.folder),
+                      color: node.isFile ? Colors.grey[500] : Colors.amber[700],
+                      size: 16,
+                    ),
+                    
+                    const SizedBox(width: 6),
+                    
+                    // File/Folder Name
+                    Expanded(
+                      child: Text(
+                        node.name,
+                        style: TextStyle(
+                          color: Colors.grey[300],
+                          fontSize: 13,
+                          fontWeight: node.isFile ? FontWeight.normal : FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
-                trailing: node.isFile ? null : Icon(
-                  node.isExpanded ? Icons.expand_less : Icons.expand_more,
-                  size: 20,
-                ),
-                onTap: () {
-                  if (!node.isFile) {
-                    setState(() {
-                      node.isExpanded = !node.isExpanded;
-                    });
-                  } else {
-                    _onFileSelected(node);
-                  }
-                },
-                onLongPress: () {
-                  _showFileOptions(context, node.name, node.isFile);
-                },
               ),
             ),
             
+            // Children (Recursive)
             if (!node.isFile && node.isExpanded && node.children.isNotEmpty)
               _buildTree(node.children, level + 1),
           ],
@@ -172,88 +272,110 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[900],
       appBar: AppBar(
-        title: const Text("📂 Flutter Code Editor"),
-        backgroundColor: Colors.indigo,
+        title: Text(
+          selectedFile?.name ?? "Flutter",
+          style: const TextStyle(fontSize: 16),
+        ),
+        backgroundColor: Colors.grey[850],
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.play_arrow),
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Run button pressed')),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.folder_open),
+            onPressed: () {
+              Scaffold.of(context).openDrawer();
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.more_vert),
+            onPressed: () {
+              // More options
+            },
+          ),
+        ],
       ),
       drawer: _buildDrawer(),
       body: Stack(
         children: [
           // Main Code Editor Area
           Container(
-            padding: const EdgeInsets.all(16),
             child: selectedFile == null
-                ? const Center(
+                ? Center(
                     child: Text(
-                      "Select a file from drawer to edit",
-                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                      "Select a file from drawer",
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                     ),
                   )
                 : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // File Name Header
+                      // Tab Bar (file tabs)
                       Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                        height: 35,
+                        color: Colors.grey[800],
                         child: Row(
                           children: [
-                            const Icon(Icons.edit_document, size: 20),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                selectedFile!.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[850],
+                                border: Border(
+                                  right: BorderSide(color: Colors.grey[700]!, width: 1),
                                 ),
                               ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close),
-                              onPressed: () {
-                                setState(() {
-                                  selectedFile = null;
-                                  codeController.clear();
-                                });
-                              },
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.insert_drive_file_outlined,
+                                    size: 14,
+                                    color: Colors.grey[500],
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    selectedFile!.name,
+                                    style: TextStyle(
+                                      color: Colors.grey[300],
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  InkWell(
+                                    onTap: () {
+                                      setState(() {
+                                        selectedFile = null;
+                                        codeController.clear();
+                                      });
+                                    },
+                                    child: Icon(
+                                      Icons.close,
+                                      size: 14,
+                                      color: Colors.grey[500],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 12),
                       
-                      // Code Editor
+                      // Code Editor with Line Numbers
                       Expanded(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade300),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: TextField(
-                            controller: codeController,
-                            maxLines: null,
-                            expands: true,
-                            style: const TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 14,
-                            ),
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.all(12),
-                              hintText: 'Start coding...',
-                            ),
-                          ),
-                        ),
+                        child: _buildCodeEditorWithLineNumbers(),
                       ),
                     ],
                   ),
           ),
           
-          // Bottom Sheet with DraggableScrollableSheet
+          // Bottom Sheet
           DraggableScrollableSheet(
             controller: bottomSheetController,
             initialChildSize: 0.1,
@@ -264,12 +386,12 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
             builder: (context, scrollController) {
               return Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                  color: Colors.grey[850],
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 10,
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 8,
                       spreadRadius: 2,
                     ),
                   ],
@@ -278,11 +400,11 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
                   children: [
                     // Handle bar
                     Container(
-                      margin: const EdgeInsets.symmetric(vertical: 8),
-                      width: 40,
-                      height: 4,
+                      margin: const EdgeInsets.symmetric(vertical: 6),
+                      width: 35,
+                      height: 3,
                       decoration: BoxDecoration(
-                        color: Colors.grey[300],
+                        color: Colors.grey[700],
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -292,46 +414,11 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
                       child: ListView(
                         controller: scrollController,
                         children: [
-                          ListTile(
-                            leading: const Icon(Icons.terminal),
-                            title: const Text('Terminal'),
-                            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                            onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Terminal opened')),
-                              );
-                            },
-                          ),
-                          ListTile(
-                            leading: const Icon(Icons.bug_report),
-                            title: const Text('Debug'),
-                            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                            onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Debug panel opened')),
-                              );
-                            },
-                          ),
-                          ListTile(
-                            leading: const Icon(Icons.search),
-                            title: const Text('Search in Files'),
-                            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                            onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Search opened')),
-                              );
-                            },
-                          ),
-                          ListTile(
-                            leading: const Icon(Icons.settings),
-                            title: const Text('Settings'),
-                            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                            onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Settings opened')),
-                              );
-                            },
-                          ),
+                          _buildBottomSheetItem(Icons.terminal, 'Terminal'),
+                          _buildBottomSheetItem(Icons.bug_report, 'Debug'),
+                          _buildBottomSheetItem(Icons.search, 'Search'),
+                          _buildBottomSheetItem(Icons.output, 'Output'),
+                          _buildBottomSheetItem(Icons.settings, 'Settings'),
                         ],
                       ),
                     ),
@@ -345,37 +432,38 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
     );
   }
 
+  Widget _buildBottomSheetItem(IconData icon, String title) {
+    return ListTile(
+      dense: true,
+      leading: Icon(icon, color: Colors.grey[400], size: 20),
+      title: Text(
+        title,
+        style: TextStyle(color: Colors.grey[300], fontSize: 14),
+      ),
+      trailing: Icon(Icons.arrow_forward_ios, size: 12, color: Colors.grey[600]),
+      onTap: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$title opened')),
+        );
+      },
+    );
+  }
+
   Widget _buildDrawer() {
     return Drawer(
+      backgroundColor: Colors.grey[900],
       child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.indigo,
-            child: const SafeArea(
-              child: Row(
-                children: [
-                  Icon(Icons.folder_open, color: Colors.white),
-                  SizedBox(width: 12),
-                  Text(
-                    "Project Files",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          
+          // NO HEADER - Direct file tree
           if (isLoading)
             const Expanded(child: Center(child: CircularProgressIndicator()))
           else
             Expanded(
               child: SingleChildScrollView(
-                child: _buildTree(fileTree),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 40), // Status bar padding
+                  child: _buildTree(fileTree),
+                ),
               ),
             ),
         ],
@@ -387,22 +475,23 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   void _showFileOptions(BuildContext context, String fileName, bool isFile) {
     showModalBottomSheet(
       context: context,
+      backgroundColor: Colors.grey[850],
       builder: (context) {
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.create_new_folder_outlined),
-                title: const Text('New'),
+                leading: const Icon(Icons.create_new_folder_outlined, color: Colors.white70),
+                title: const Text('New', style: TextStyle(color: Colors.white70)),
                 onTap: () {
                   Navigator.pop(context);
                   _showNewPopup(context);
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.edit),
-                title: const Text('Rename'),
+                leading: const Icon(Icons.edit, color: Colors.white70),
+                title: const Text('Rename', style: TextStyle(color: Colors.white70)),
                 onTap: () {
                   Navigator.pop(context);
                   _showRenameDialog(context, fileName);
@@ -410,7 +499,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
               ),
               ListTile(
                 leading: const Icon(Icons.delete_outline, color: Colors.red),
-                title: const Text('Delete'),
+                title: const Text('Delete', style: TextStyle(color: Colors.red)),
                 onTap: () {
                   Navigator.pop(context);
                   _deleteFile(fileName);
@@ -426,22 +515,23 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   void _showNewPopup(BuildContext context) {
     showModalBottomSheet(
       context: context,
+      backgroundColor: Colors.grey[850],
       builder: (context) {
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.insert_drive_file),
-                title: const Text('File'),
+                leading: const Icon(Icons.insert_drive_file, color: Colors.white70),
+                title: const Text('File', style: TextStyle(color: Colors.white70)),
                 onTap: () {
                   Navigator.pop(context);
                   _showCreateDialog(context, isFile: true);
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.folder),
-                title: const Text('Directory'),
+                leading: const Icon(Icons.folder, color: Colors.white70),
+                title: const Text('Directory', style: TextStyle(color: Colors.white70)),
                 onTap: () {
                   Navigator.pop(context);
                   _showCreateDialog(context, isFile: false);
@@ -459,11 +549,17 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(isFile ? 'Create File' : 'Create Folder'),
+        backgroundColor: Colors.grey[850],
+        title: Text(
+          isFile ? 'Create File' : 'Create Folder',
+          style: const TextStyle(color: Colors.white),
+        ),
         content: TextField(
           controller: nameController,
+          style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
             hintText: isFile ? 'File name' : 'Folder name',
+            hintStyle: TextStyle(color: Colors.grey[600]),
           ),
         ),
         actions: [
@@ -486,57 +582,15 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   }
 
   void _showRenameDialog(BuildContext context, String oldName) {
-    final TextEditingController renameController =
-        TextEditingController(text: oldName);
+    final TextEditingController renameController = TextEditingController(text: oldName);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Rename'),
+        backgroundColor: Colors.grey[850],
+        title: const Text('Rename', style: TextStyle(color: Colors.white)),
         content: TextField(
           controller: renameController,
-          decoration: const InputDecoration(hintText: 'Enter new name'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Renamed successfully')),
-              );
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _deleteFile(String fileName) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete'),
-        content: Text('Do you want to delete "$fileName"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Deleted successfully')),
-              );
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-  }
-}
+          style: const TextStyle(color: Colors.white),
+          decoration: InputDecoration(
+            hintText: 'Enter new name',
+      
