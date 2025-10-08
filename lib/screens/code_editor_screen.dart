@@ -22,6 +22,34 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   void initState() {
     super.initState();
     _loadZipFromAssets();
+    // _loadDummyData(); // Uncomment to test with dummy data
+  }
+  
+  // 🔹 DUMMY DATA FOR TESTING
+  void _loadDummyData() {
+    print('📦 Loading dummy data...');
+    
+    FileNode root = FileNode(name: 'Root', fullPath: '', isFile: false, isExpanded: true);
+    
+    // Create dummy structure
+    var folder1 = FileNode(name: 'src', fullPath: 'src', isFile: false, isExpanded: true, children: []);
+    var file1 = FileNode(name: 'main.dart', fullPath: 'src/main.dart', isFile: true, content: 'void main() {\n  print("Hello World");\n}');
+    var file2 = FileNode(name: 'utils.dart', fullPath: 'src/utils.dart', isFile: true, content: '// Utils file');
+    
+    folder1.children.add(file1);
+    folder1.children.add(file2);
+    
+    var file3 = FileNode(name: 'README.md', fullPath: 'README.md', isFile: true, content: '# My Project\n\nThis is a test project.');
+    
+    root.children.add(folder1);
+    root.children.add(file3);
+    
+    setState(() {
+      fileTree = root.children;
+      isLoading = false;
+    });
+    
+    print('✅ Dummy data loaded: ${fileTree.length} items');
   }
 
   @override
@@ -36,12 +64,19 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   // 🔹 ZIP SE TREE BANAYE
   Future<void> _loadZipFromAssets() async {
     try {
+      print('🔄 Loading zip file...');
       final ByteData data = await rootBundle.load('assets/Hello-World.zip');
+      print('✅ Zip loaded: ${data.lengthInBytes} bytes');
+      
       final Archive archive = ZipDecoder().decodeBytes(data.buffer.asUint8List());
+      print('✅ Zip decoded: ${archive.files.length} files');
       
       FileNode root = FileNode(name: 'Root', fullPath: '', isFile: false, isExpanded: true);
       
+      int fileCount = 0;
       for (var file in archive.files) {
+        print('📄 Processing: ${file.name} (isFile: ${file.isFile})');
+        
         if (file.name.isNotEmpty && !file.name.endsWith('/')) {
           String content = '';
           if (file.isFile) {
@@ -52,16 +87,41 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
             }
           }
           _addToTree(root, file.name, file.isFile, content);
+          fileCount++;
         }
       }
+      
+      print('✅ Total files added: $fileCount');
+      print('✅ Root children: ${root.children.length}');
       
       setState(() {
         fileTree = root.children;
         isLoading = false;
       });
       
-    } catch (e) {
-      print('Error loading zip: $e');
+      print('✅ File tree ready with ${fileTree.length} items');
+      
+    } catch (e, stackTrace) {
+      print('❌ Error loading zip: $e');
+      print('❌ Stack trace: $stackTrace');
+      
+      // Show error dialog
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Error'),
+            content: Text('Failed to load zip file:\n$e'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+      
       setState(() {
         isLoading = false;
       });
@@ -480,191 +540,62 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
       backgroundColor: Colors.grey[900],
       child: Column(
         children: [
+          // Debug info
+          Container(
+            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(top: 40),
+            color: Colors.grey[800],
+            child: Row(
+              children: [
+                const Icon(Icons.folder, color: Colors.amber, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Files: ${fileTree.length}',
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          
           if (isLoading)
-            const Expanded(child: Center(child: CircularProgressIndicator()))
+            const Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text(
+                      'Loading files...',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (fileTree.isEmpty)
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'No files found!',
+                      style: TextStyle(color: Colors.white70, fontSize: 16),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Check console for errors',
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            )
           else
             Expanded(
               child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 40),
-                  child: _buildTree(fileTree),
-                ),
+                child: _buildTree(fileTree),
               ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  void _showFileOptions(BuildContext context, String fileName, bool isFile) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.grey[850],
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.create_new_folder_outlined, color: Colors.white70),
-                title: const Text('New', style: TextStyle(color: Colors.white70)),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showNewPopup(context);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.edit, color: Colors.white70),
-                title: const Text('Rename', style: TextStyle(color: Colors.white70)),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showRenameDialog(context, fileName);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.delete_outline, color: Colors.red),
-                title: const Text('Delete', style: TextStyle(color: Colors.red)),
-                onTap: () {
-                  Navigator.pop(context);
-                  _deleteFile(fileName);
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showNewPopup(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.grey[850],
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.insert_drive_file, color: Colors.white70),
-                title: const Text('File', style: TextStyle(color: Colors.white70)),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showCreateDialog(context, isFile: true);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.folder, color: Colors.white70),
-                title: const Text('Directory', style: TextStyle(color: Colors.white70)),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showCreateDialog(context, isFile: false);
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showCreateDialog(BuildContext context, {required bool isFile}) {
-    final TextEditingController nameController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[850],
-        title: Text(
-          isFile ? 'Create File' : 'Create Folder',
-          style: const TextStyle(color: Colors.white),
-        ),
-        content: TextField(
-          controller: nameController,
-          style: const TextStyle(color: Colors.white),
-          decoration: InputDecoration(
-            hintText: isFile ? 'File name' : 'Folder name',
-            hintStyle: TextStyle(color: Colors.grey[600]),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text("${isFile ? 'File' : 'Folder'} created")),
-              );
-            },
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showRenameDialog(BuildContext context, String oldName) {
-    final TextEditingController renameController = TextEditingController(text: oldName);
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[850],
-        title: const Text('Rename', style: TextStyle(color: Colors.white)),
-        content: TextField(
-          controller: renameController,
-          style: const TextStyle(color: Colors.white),
-          decoration: InputDecoration(
-            hintText: 'Enter new name',
-            hintStyle: TextStyle(color: Colors.grey[600]),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Renamed successfully')),
-              );
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _deleteFile(String fileName) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[850],
-        title: const Text('Delete', style: TextStyle(color: Colors.white)),
-        content: Text(
-          'Do you want to delete "$fileName"?',
-          style: const TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Deleted successfully')),
-              );
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-  }
-}
