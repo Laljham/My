@@ -16,28 +16,44 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
   FileNode? selectedFile;
   TextEditingController codeController = TextEditingController();
   DraggableScrollableController bottomSheetController = DraggableScrollableController();
-  late TabController tabController;
+  TabController? tabController;
   List<String> openedFiles = [];
+  
+  // 🔹 Scroll controllers for sync
+  ScrollController lineNumberController = ScrollController();
+  ScrollController codeScrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _loadZipFromAssets();
-    tabController = TabController(length: 1, vsync: this);
+    
+    // Sync scroll
+    codeScrollController.addListener(() {
+      if (lineNumberController.hasClients) {
+        lineNumberController.jumpTo(codeScrollController.offset);
+      }
+    });
   }
 
   @override
   void dispose() {
     codeController.dispose();
     bottomSheetController.dispose();
-    tabController.dispose();
+    tabController?.dispose();
+    lineNumberController.dispose();
+    codeScrollController.dispose();
     super.dispose();
   }
 
   Future<void> _loadZipFromAssets() async {
     try {
+      print('🔄 Loading zip...');
       final ByteData data = await rootBundle.load('assets/Hello-World.zip');
+      print('✅ Zip loaded: ${data.lengthInBytes} bytes');
+      
       final Archive archive = ZipDecoder().decodeBytes(data.buffer.asUint8List());
+      print('✅ Files in zip: ${archive.files.length}');
 
       FileNode root = FileNode(name: 'Hello-World', fullPath: '', isFile: false, isExpanded: true);
 
@@ -59,8 +75,10 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
         fileTree = root.children;
         isLoading = false;
       });
+      
+      print('✅ Tree ready with ${fileTree.length} items');
     } catch (e) {
-      print('Error loading zip: $e');
+      print('❌ Error: $e');
       setState(() {
         isLoading = false;
       });
@@ -74,10 +92,12 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
     String currentPart = parts.first;
     String currentPath = node.fullPath.isEmpty ? currentPart : '${node.fullPath}/$currentPart';
 
-    FileNode? existingChild = node.children.cast<FileNode?>().firstWhere(
-      (child) => child?.name == currentPart,
-      orElse: () => null,
-    );
+    FileNode? existingChild;
+    try {
+      existingChild = node.children.firstWhere((child) => child.name == currentPart);
+    } catch (e) {
+      existingChild = null;
+    }
 
     if (existingChild == null) {
       existingChild = FileNode(
@@ -87,7 +107,6 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
         content: parts.length == 1 && isFile ? content : null,
         children: [],
       );
-      // 🔹 Preserve zip order
       node.children.add(existingChild);
     }
 
@@ -101,8 +120,22 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
       setState(() {
         selectedFile = node;
         codeController.text = node.content ?? '';
-        if (!openedFiles.contains(node.fullPath)) openedFiles.add(node.fullPath);
-        tabController = TabController(length: openedFiles.length, vsync: this);
+        
+        if (!openedFiles.contains(node.fullPath)) {
+          openedFiles.add(node.fullPath);
+          
+          // 🔹 Recreate TabController only when tabs change
+          tabController?.dispose();
+          tabController = TabController(
+            length: openedFiles.length,
+            vsync: this,
+            initialIndex: openedFiles.length - 1,
+          );
+        } else {
+          // Switch to existing tab
+          int index = openedFiles.indexOf(node.fullPath);
+          tabController?.animateTo(index);
+        }
       });
 
       codeController.addListener(() {
@@ -111,6 +144,29 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
         }
       });
     }
+  }
+
+  void _closeTab(String path) {
+    setState(() {
+      openedFiles.remove(path);
+      
+      if (openedFiles.isEmpty) {
+        selectedFile = null;
+        codeController.clear();
+        tabController?.dispose();
+        tabController = null;
+      } else {
+        tabController?.dispose();
+        tabController = TabController(length: openedFiles.length, vsync: this);
+        
+        // Select last file
+        FileNode? lastNode = _findNodeByPath(fileTree, openedFiles.last);
+        if (lastNode != null) {
+          selectedFile = lastNode;
+          codeController.text = lastNode.content ?? '';
+        }
+      }
+    });
   }
 
   Widget _buildTree(List<FileNode> nodes, [int level = 0]) {
@@ -125,53 +181,50 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              color: isSelected ? Colors.blue.withOpacity(0.2) : null,
-              padding: EdgeInsets.only(left: level * 10.0, right: 8, top: 2.0, bottom: 2.0),
-              child: ListTile(
-                dense: true,
-                visualDensity: VisualDensity.compact,
-                minLeadingWidth: 0,
-                title: Row(
+            InkWell(
+              onTap: () {
+                if (!node.isFile) {
+                  setState(() {
+                    node.isExpanded = !node.isExpanded;
+                  });
+                } else {
+                  _onFileSelected(node);
+                }
+              },
+              onLongPress: () {
+                _showFileOptions(context, node.name, node.isFile);
+              },
+              child: Container(
+                color: isSelected ? Colors.blue.withOpacity(0.2) : null,
+                padding: EdgeInsets.only(left: level * 12.0 + 8, right: 8, top: 6, bottom: 6),
+                child: Row(
                   children: [
                     if (!node.isFile)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 4.0),
-                        child: Icon(
-                          node.isExpanded ? Icons.arrow_drop_down : Icons.arrow_right,
-                          size: 20,
-                          color: Colors.grey[700],
-                        ),
-                      ),
+                      Icon(
+                        node.isExpanded ? Icons.arrow_drop_down : Icons.arrow_right,
+                        size: 18,
+                        color: Colors.grey[700],
+                      )
+                    else
+                      const SizedBox(width: 18),
+                    const SizedBox(width: 4),
                     Icon(
                       node.isFile ? Icons.insert_drive_file_outlined : Icons.folder,
-                      color: Colors.white,
-                      size: 18,
+                      color: node.isFile ? Colors.grey[700] : Colors.amber[700],
+                      size: 16,
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         node.name,
                         style: TextStyle(
                           fontWeight: node.isFile ? FontWeight.normal : FontWeight.w600,
-                          fontSize: 14,
+                          fontSize: 13,
                         ),
                       ),
                     ),
                   ],
                 ),
-                onTap: () {
-                  if (!node.isFile) {
-                    setState(() {
-                      node.isExpanded = !node.isExpanded;
-                    });
-                  } else {
-                    _onFileSelected(node);
-                  }
-                },
-                onLongPress: () {
-                  _showFileOptions(context, node.name, node.isFile);
-                },
               ),
             ),
             if (!node.isFile && node.isExpanded && node.children.isNotEmpty)
@@ -190,70 +243,108 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
         backgroundColor: Colors.indigo,
       ),
       drawer: _buildDrawer(),
-      body: Column(
+      body: Stack(
         children: [
-          // 🔹 TabBar for opened files
-          if (openedFiles.isNotEmpty)
-            Container(
-              color: Colors.grey[200],
-              height: 40,
-              child: TabBar(
-                controller: tabController,
-                isScrollable: true,
-                labelColor: Colors.black,
-                unselectedLabelColor: Colors.grey,
-                indicatorColor: Colors.blue,
-                tabs: openedFiles.map((f) => Tab(text: f.split('/').last)).toList(),
-                onTap: (index) {
-                  // Switch file
-                  String path = openedFiles[index];
-                  FileNode? node = _findNodeByPath(fileTree, path);
-                  if (node != null) _onFileSelected(node);
-                },
-              ),
-            ),
-
-          // 🔹 Editor area with line numbers
-          Expanded(
-            child: Row(
-              children: [
+          // Main editor area
+          Column(
+            children: [
+              // 🔹 TabBar for opened files
+              if (openedFiles.isNotEmpty && tabController != null)
                 Container(
-                  width: 40,
                   color: Colors.grey[200],
-                  child: SingleChildScrollView(
-                    controller: ScrollController(),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: List.generate(
-                        codeController.text.split('\n').length,
-                        (index) => Text('${index + 1}', style: const TextStyle(color: Colors.grey)),
-                      ),
-                    ),
+                  height: 40,
+                  child: TabBar(
+                    controller: tabController,
+                    isScrollable: true,
+                    labelColor: Colors.black,
+                    unselectedLabelColor: Colors.grey,
+                    indicatorColor: Colors.blue,
+                    tabs: openedFiles.map((f) {
+                      return Tab(
+                        child: Row(
+                          children: [
+                            Text(f.split('/').last),
+                            const SizedBox(width: 8),
+                            InkWell(
+                              onTap: () => _closeTab(f),
+                              child: const Icon(Icons.close, size: 14),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    onTap: (index) {
+                      String path = openedFiles[index];
+                      FileNode? node = _findNodeByPath(fileTree, path);
+                      if (node != null) {
+                        setState(() {
+                          selectedFile = node;
+                          codeController.text = node.content ?? '';
+                        });
+                      }
+                    },
                   ),
                 ),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    child: TextField(
-                      controller: codeController,
-                      maxLines: null,
-                      expands: true,
-                      style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        hintText: 'Start coding...',
+
+              // 🔹 Editor area with line numbers
+              Expanded(
+                child: selectedFile == null
+                    ? const Center(child: Text('Select a file from drawer'))
+                    : Row(
+                        children: [
+                          // Line numbers
+                          Container(
+                            width: 50,
+                            color: Colors.grey[200],
+                            child: ListView.builder(
+                              controller: lineNumberController,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: codeController.text.split('\n').length,
+                              itemBuilder: (context, index) {
+                                return Container(
+                                  height: 20,
+                                  alignment: Alignment.centerRight,
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: Text(
+                                    '${index + 1}',
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 12,
+                                      fontFamily: 'monospace',
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          // Code editor
+                          Expanded(
+                            child: TextField(
+                              controller: codeController,
+                              scrollController: codeScrollController,
+                              maxLines: null,
+                              style: const TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 14,
+                                height: 1.43,
+                              ),
+                              decoration: const InputDecoration(
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.all(8),
+                                hintText: 'Start coding...',
+                              ),
+                              onChanged: (_) {
+                                setState(() {}); // Update line numbers
+                              },
+                            ),
+                          ),
+                        ],
                       ),
-                      onChanged: (_) {
-                        setState(() {}); // Update line numbers
-                      },
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
 
-          // 🔹 Bottom Sheet with shortcut buttons
+          // 🔹 Bottom Sheet
           DraggableScrollableSheet(
             controller: bottomSheetController,
             initialChildSize: 0.1,
@@ -301,42 +392,17 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
                           ListTile(
                             leading: const Icon(Icons.terminal),
                             title: const Text('Terminal'),
-                            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                            onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Terminal opened')),
-                              );
-                            },
+                            onTap: () {},
                           ),
                           ListTile(
                             leading: const Icon(Icons.bug_report),
                             title: const Text('Debug'),
-                            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                            onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Debug panel opened')),
-                              );
-                            },
+                            onTap: () {},
                           ),
                           ListTile(
                             leading: const Icon(Icons.search),
-                            title: const Text('Search in Files'),
-                            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                            onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Search opened')),
-                              );
-                            },
-                          ),
-                          ListTile(
-                            leading: const Icon(Icons.settings),
-                            title: const Text('Settings'),
-                            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                            onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Settings opened')),
-                              );
-                            },
+                            title: const Text('Search'),
+                            onTap: () {},
                           ),
                         ],
                       ),
@@ -355,8 +421,34 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
     return Drawer(
       child: Column(
         children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(top: 40),
+            child: Row(
+              children: [
+                const Icon(Icons.folder, color: Colors.amber),
+                const SizedBox(width: 8),
+                Text('Files: ${fileTree.length}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+          const Divider(),
           if (isLoading)
             const Expanded(child: Center(child: CircularProgressIndicator()))
+          else if (fileTree.isEmpty)
+            const Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    SizedBox(height: 16),
+                    Text('No files found'),
+                    Text('Check console', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  ],
+                ),
+              ),
+            )
           else
             Expanded(
               child: SingleChildScrollView(
@@ -394,3 +486,103 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> with TickerProvider
                   Navigator.pop(context);
                   _showNewPopup(context);
                 },
+              ),
+              ListTile(
+                leading: const Icon(Icons.edit),
+                title: const Text('Rename'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showRenameDialog(context, fileName);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text('Delete'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _deleteFile(fileName);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showNewPopup(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.insert_drive_file),
+                title: const Text('File'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showCreateDialog(context, isFile: true);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.folder),
+                title: const Text('Directory'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showCreateDialog(context, isFile: false);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showCreateDialog(BuildContext context, {required bool isFile}) {
+    final TextEditingController nameController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isFile ? 'Create File' : 'Create Folder'),
+        content: TextField(
+          controller: nameController,
+          decoration: InputDecoration(
+            hintText: isFile ? 'File name' : 'Folder name',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text("${isFile ? 'File' : 'Folder'} created")),
+              );
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRenameDialog(BuildContext context, String oldName) {
+    final TextEditingController renameController = TextEditingController(text: oldName);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rename'),
+        content: TextField(
+          controller: renameController,
+          decoration: const InputDecoration(hintText: 'Enter new name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const
