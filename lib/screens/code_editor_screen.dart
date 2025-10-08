@@ -122,7 +122,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
           children: [
             Container(
               color: isSelected ? Colors.blue.withOpacity(0.2) : null,
-              padding: EdgeInsets.only(left: (level * 10.0), right: 8), // 🔹 Reduced gap
+              padding: EdgeInsets.only(left: level * 10.0, right: 8, top: 2.0, bottom: 2.0), // 🔹 Reduced gap
               child: ListTile(
                 dense: true,
                 visualDensity: VisualDensity.compact,
@@ -135,15 +135,15 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
                       Padding(
                         padding: const EdgeInsets.only(right: 4.0),
                         child: Icon(
-                          node.isExpanded ? Icons.expand_less : Icons.expand_more,
-                          size: 18,
+                          node.isExpanded ? Icons.expand_more : Icons.expand_left,
+                          size: 20,
                           color: Colors.grey[700],
                         ),
                       ),
 
                     Icon(
                       node.isFile ? Icons.insert_drive_file_outlined : Icons.folder,
-                      color: node.isFile ? Colors.blueGrey : Colors.amber,
+                      color: node.isFile ? Colors.blueGrey : Colors.blueGrey,
                       size: 18,
                     ),
                     const SizedBox(width: 6),
