@@ -10,12 +10,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  archive: ^3.3.0    # ✅ Same level pe hona chahiye
-  path: ^1.8.0       # ✅ Same level pe hona chahiye
+  archive: ^3.3.0    
+  path: ^1.8.0       
+
 flutter_code_editor: ^0.3.5
-
-
-  flutter_highlight: ^0.8.0
 
 dev_dependencies:
   flutter_test:
