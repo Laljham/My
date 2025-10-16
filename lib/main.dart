@@ -1,79 +1,115 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter_code_editor/flutter_code_editor.dart';
-import 'package:flutter_highlight/themes/monokai-sublime.dart';
-import 'package:highlight/languages/dart.dart';
+import 'package:http/http.dart' as http;
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
-void main() => runApp(const CodeApp());
+const apiKey = 'YOUR_API_KEY';
+const playlistId = 'YOUR_PLAYLIST_ID';
 
-class CodeApp extends StatelessWidget {
-  const CodeApp({super.key});
+void main() => runApp(const MyApp());
+
+class MyApp extends StatelessWidget {
+  const MyApp();
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
+      home: PlaylistHome(),
       debugShowCheckedModeBanner: false,
-      home: CodeEditorPage(),
     );
   }
 }
 
-class CodeEditorPage extends StatefulWidget {
-  const CodeEditorPage({super.key});
+class PlaylistHome extends StatefulWidget {
+  const PlaylistHome({Key? key}) : super(key: key);
 
   @override
-  State<CodeEditorPage> createState() => _CodeEditorPageState();
+  State<PlaylistHome> createState() => _PlaylistHomeState();
 }
 
-class _CodeEditorPageState extends State<CodeEditorPage> {
-  final controller = CodeController(
-    text: '''
-void main() {
-  print("Hello Flutter!");
-}
-''',
-    language: dart,
-  );
+class _PlaylistHomeState extends State<PlaylistHome> {
+  List videos = [];
+
+  @override
+  void initState() {
+    super.initState();
+    fetchPlaylist();
+  }
+
+  Future<void> fetchPlaylist() async {
+    final url =
+        'https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=60&playlistId=$playlistId&key=$apiKey';
+    final res = await http.get(Uri.parse(url));
+    final data = json.decode(res.body);
+    setState(() {
+      videos = data['items'];
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final double fontSize = size.width < 600 ? 14 : 18; // 📱 mobile vs 💻 desktop
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mobile Code Editor'),
-        backgroundColor: Colors.black87,
-      ),
       backgroundColor: Colors.black,
-      body: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            color: Colors.black87,
-          ),
-          child: CodeTheme(
-            data: CodeThemeData(styles: monokaiSublimeTheme),
-            child: CodeField(
-              controller: controller,
-              textStyle: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: fontSize,
-                height: 1.3,
-                color: Colors.white,
-              ),
-              expands: true,
-              minLines: null,
-              maxLines: null,
-              lineNumberStyle: LineNumberStyle(
-                textStyle: TextStyle(
-                  fontSize: fontSize * 0.9,
-                  color: Colors.grey[500],
-                ),
-              ),
+      appBar: AppBar(
+        title: const Text('My Playlist'),
+        backgroundColor: Colors.redAccent,
+      ),
+      body: videos.isEmpty
+          ? const Center(child: CircularProgressIndicator())
+          : ListView.builder(
+              itemCount: videos.length,
+              itemBuilder: (context, i) {
+                final snippet = videos[i]['snippet'];
+                final videoId = snippet['resourceId']['videoId'];
+                return Card(
+                  color: Colors.grey[900],
+                  child: ListTile(
+                    leading: Image.network(snippet['thumbnails']['default']['url']),
+                    title: Text(snippet['title'],
+                        style: const TextStyle(color: Colors.white)),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => VideoPlayerScreen(videoId: videoId),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
             ),
-          ),
-        ),
+    );
+  }
+}
+
+class VideoPlayerScreen extends StatefulWidget {
+  final String videoId;
+  const VideoPlayerScreen({required this.videoId});
+
+  @override
+  State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
+}
+
+class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
+  late YoutubePlayerController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = YoutubePlayerController(
+      initialVideoId: widget.videoId,
+      flags: const YoutubePlayerFlags(autoPlay: true),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: YoutubePlayer(
+        controller: _controller,
+        showVideoProgressIndicator: true,
       ),
     );
   }
