@@ -33,13 +33,15 @@ class _TodoHomeState extends State<TodoHome> {
     loadTodos();
   }
 
-  /// Load Todos from SharedPreferences
+  /// Load Todos
   Future<void> loadTodos() async {
     final prefs = await SharedPreferences.getInstance();
-    final String? data = prefs.getString("todos");
-    if (data != null) {
+    final String? saved = prefs.getString("todos");
+
+    if (saved != null) {
+      final List decoded = json.decode(saved);
       setState(() {
-        todos = List<Map<String, dynamic>>.from(json.decode(data));
+        todos = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
       });
     }
   }
@@ -53,9 +55,11 @@ class _TodoHomeState extends State<TodoHome> {
   /// Add Task
   void addTodo() {
     if (controller.text.trim().isEmpty) return;
+
     setState(() {
       todos.add({"task": controller.text.trim(), "done": false});
     });
+
     controller.clear();
     saveTodos();
   }
@@ -93,7 +97,6 @@ class _TodoHomeState extends State<TodoHome> {
 
       body: Column(
         children: [
-          // Text Input
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: TextField(
@@ -111,7 +114,6 @@ class _TodoHomeState extends State<TodoHome> {
             ),
           ),
 
-          // List of Tasks
           Expanded(
             child: todos.isEmpty
                 ? const Center(
@@ -143,7 +145,8 @@ class _TodoHomeState extends State<TodoHome> {
                             ),
                           ),
                           trailing: IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.redAccent),
+                            icon:
+                                const Icon(Icons.delete, color: Colors.redAccent),
                             onPressed: () => deleteTodo(index),
                           ),
                         ),
