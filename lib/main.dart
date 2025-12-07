@@ -1,161 +1,183 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 void main() {
-  runApp(const TodoApp());
+  runApp(const CalculatorApp());
 }
 
-class TodoApp extends StatelessWidget {
-  const TodoApp({super.key});
+class CalculatorApp extends StatelessWidget {
+  const CalculatorApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: TodoHome(),
+      home: CalculatorHome(),
     );
   }
 }
 
-class TodoHome extends StatefulWidget {
+class CalculatorHome extends StatefulWidget {
   @override
-  State<TodoHome> createState() => _TodoHomeState();
+  State<CalculatorHome> createState() => _CalculatorHomeState();
 }
 
-class _TodoHomeState extends State<TodoHome> {
-  List<Map<String, dynamic>> todos = [];
-  final TextEditingController controller = TextEditingController();
+class _CalculatorHomeState extends State<CalculatorHome> {
+  String input = "";
+  String result = "0";
 
-  @override
-  void initState() {
-    super.initState();
-    loadTodos();
-  }
+  final List<String> buttons = [
+    "C", "⌫", "%", "/",
+    "7", "8", "9", "*",
+    "4", "5", "6", "-",
+    "1", "2", "3", "+",
+    "00", "0", ".", "=",
+  ];
 
-  /// Load Todos
-  Future<void> loadTodos() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? saved = prefs.getString("todos");
-
-    if (saved != null) {
-      final List decoded = json.decode(saved);
-      setState(() {
-        todos = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
-      });
+  /// Open your URL
+  Future<void> openURL() async {
+    final url = Uri.parse("https://shashi.zya.me/");
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      throw "Could not launch $url";
     }
   }
 
-  /// Save Todos
-  Future<void> saveTodos() async {
-    final prefs = await SharedPreferences.getInstance();
-    prefs.setString("todos", json.encode(todos));
+  void buttonPressed(String value) {
+    setState(() {
+      if (value == "C") {
+        input = "";
+        result = "0";
+      } else if (value == "⌫") {
+        if (input.isNotEmpty) input = input.substring(0, input.length - 1);
+      } else if (value == "=") {
+        try {
+          result = calculate(input).toString();
+        } catch (e) {
+          result = "Error";
+        }
+      } else {
+        input += value;
+      }
+    });
   }
 
-  /// Add Task
-  void addTodo() {
-    if (controller.text.trim().isEmpty) return;
+  double calculate(String expr) {
+    List<String> tokens = expr.split(RegExp(r'([+\-*/%])')).toList();
+    List<String> ops = expr.split(RegExp(r'[0-9.]')).where((e) => e != "").toList();
 
-    setState(() {
-      todos.add({"task": controller.text.trim(), "done": false});
-    });
+    double total = double.parse(tokens[0]);
 
-    controller.clear();
-    saveTodos();
-  }
+    for (int i = 1; i < tokens.length; i++) {
+      if (tokens[i].trim().isEmpty) continue;
+      double number = double.parse(tokens[i]);
+      String op = ops[i - 1];
 
-  /// Toggle Complete
-  void toggleDone(int index) {
-    setState(() {
-      todos[index]["done"] = !todos[index]["done"];
-    });
-    saveTodos();
-  }
-
-  /// Delete Task
-  void deleteTodo(int index) {
-    setState(() {
-      todos.removeAt(index);
-    });
-    saveTodos();
+      switch (op) {
+        case '+':
+          total += number;
+          break;
+        case '-':
+          total -= number;
+          break;
+        case '*':
+          total *= number;
+          break;
+        case '/':
+          total /= number;
+          break;
+        case '%':
+          total %= number;
+          break;
+      }
+    }
+    return total;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: const Text("Todo App"),
-        backgroundColor: Colors.deepPurple,
-      ),
 
-      floatingActionButton: FloatingActionButton(
+      appBar: AppBar(
         backgroundColor: Colors.deepPurple,
-        child: const Icon(Icons.add),
-        onPressed: addTodo,
+        title: const Text("Calculator"),
+        centerTitle: true,
       ),
 
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: TextField(
-              controller: controller,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: "Add a task...",
-                hintStyle: const TextStyle(color: Colors.white54),
-                filled: true,
-                fillColor: Colors.grey[900],
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+          /// Your Website Banner
+          InkWell(
+            onTap: openURL,
+            child: Container(
+              width: double.infinity,
+              color: Colors.deepPurple,
+              padding: const EdgeInsets.all(12),
+              child: const Text(
+                "Visit: https://shashi.zya.me/",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white, fontSize: 16),
               ),
             ),
           ),
 
+          // Display
           Expanded(
-            child: todos.isEmpty
-                ? const Center(
-                    child: Text(
-                      "No tasks yet!",
-                      style: TextStyle(color: Colors.white70),
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: todos.length,
-                    itemBuilder: (context, index) {
-                      final task = todos[index];
-
-                      return Card(
-                        color: Colors.grey[900],
-                        child: ListTile(
-                          leading: Checkbox(
-                            value: task["done"],
-                            onChanged: (_) => toggleDone(index),
-                            activeColor: Colors.deepPurple,
-                          ),
-                          title: Text(
-                            task["task"],
-                            style: TextStyle(
-                              color: Colors.white,
-                              decoration: task["done"]
-                                  ? TextDecoration.lineThrough
-                                  : TextDecoration.none,
-                            ),
-                          ),
-                          trailing: IconButton(
-                            icon:
-                                const Icon(Icons.delete, color: Colors.redAccent),
-                            onPressed: () => deleteTodo(index),
-                          ),
-                        ),
-                      );
-                    },
+            child: Container(
+              alignment: Alignment.bottomRight,
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    input,
+                    style: const TextStyle(color: Colors.white70, fontSize: 28),
                   ),
+                  const SizedBox(height: 10),
+                  Text(
+                    result,
+                    style: const TextStyle(color: Colors.white, fontSize: 48),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Buttons Grid
+          Expanded(
+            flex: 2,
+            child: GridView.builder(
+              itemCount: buttons.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 4),
+              itemBuilder: (context, index) {
+                return Padding(
+                  padding: const EdgeInsets.all(6.0),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isOperator(buttons[index])
+                          ? Colors.deepPurple
+                          : Colors.grey[850],
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () => buttonPressed(buttons[index]),
+                    child: Text(
+                      buttons[index],
+                      style: const TextStyle(color: Colors.white, fontSize: 22),
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),
     );
+  }
+
+  bool isOperator(String x) {
+    return (x == "/" || x == "*" || x == "-" || x == "+" || x == "%");
   }
 }
